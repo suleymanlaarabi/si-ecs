@@ -24,12 +24,19 @@ struct Table {
     uint32_t bucketIndex = 0; // used for TableMap.hpp
     uint64_t count = 0;
     uint64_t capacity = 0;
+    SparseIndices addEdge; // cid -> tid
+    SparseIndices removeEdge; // cid -> tid
 
     void growIfNeeded();
 
 public:
     BloomFilter bloom;
     explicit Table(EntityType type, ComponentRegistry& componentRegistry, TableId tid) noexcept;
+    Table(const Table&) = delete;
+    Table& operator=(const Table&) = delete;
+    Table(Table&& other) noexcept;
+    Table& operator=(Table&& other) noexcept;
+    ~Table();
     EntityRow addEntity(Entity entity);
 
     Entity removeEntity(EntityRow row);

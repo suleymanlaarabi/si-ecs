@@ -11,6 +11,7 @@ struct EntityBenchConfig {
     uint32_t samples = 8;
     uint32_t entityCount = 1024;
     uint32_t componentCount = 64;
+    bool onlyAddRemove = false;
 };
 
 template <size_t... I>
@@ -68,7 +69,7 @@ std::vector<Entity> createPopulatedEntities(World& world, const EntityBenchConfi
 }
 
 void printUsage() {
-    std::cout << "usage: ecs_bench_entity_component [--samples N] [--entities N] [--components N]\n";
+    std::cout << "usage: ecs_bench_entity_component [--samples N] [--entities N] [--components N] [--only MODE]\n";
 }
 
 bool parseArgs(const int argc, char** argv, EntityBenchConfig& config) {
@@ -84,21 +85,31 @@ bool parseArgs(const int argc, char** argv, EntityBenchConfig& config) {
             return false;
         }
 
-        uint32_t value = 0;
-        if (!bench::parseUintArg(argv[i + 1], value)) {
-            std::cerr << "invalid value for " << arg << '\n';
-            return false;
-        }
-
-        if (arg == "--samples") {
-            config.samples = value;
-        } else if (arg == "--entities") {
-            config.entityCount = value;
-        } else if (arg == "--components") {
-            config.componentCount = value;
+        if (arg == "--only") {
+            const std::string_view mode = argv[i + 1];
+            if (mode == "add-remove") {
+                config.onlyAddRemove = true;
+            } else if (mode != "all") {
+                std::cerr << "invalid value for " << arg << '\n';
+                return false;
+            }
         } else {
-            std::cerr << "unknown argument: " << arg << '\n';
-            return false;
+            uint32_t value = 0;
+            if (!bench::parseUintArg(argv[i + 1], value)) {
+                std::cerr << "invalid value for " << arg << '\n';
+                return false;
+            }
+
+            if (arg == "--samples") {
+                config.samples = value;
+            } else if (arg == "--entities") {
+                config.entityCount = value;
+            } else if (arg == "--components") {
+                config.componentCount = value;
+            } else {
+                std::cerr << "unknown argument: " << arg << '\n';
+                return false;
+            }
         }
 
         i += 1;
@@ -138,6 +149,27 @@ int main(const int argc, char** argv) {
             return static_cast<uint64_t>(world.getTables().size());
         }
     ));
+
+    if (config.onlyAddRemove) {
+        bench::printResult(bench::run(
+            "remove_components_from_populated_entities",
+            config.samples,
+            static_cast<uint64_t>(config.entityCount) * config.componentCount,
+            [&]() -> uint64_t {
+                World world;
+                prepareWorld(world, config);
+                const auto entities = createPopulatedEntities(world, config);
+
+                for (const Entity entity : entities) {
+                    removeBenchComponentsUpTo(world, entity, config.componentCount, bench::BenchComponentIndex{});
+                }
+
+                return static_cast<uint64_t>(world.getTables().size());
+            }
+        ));
+
+        return 0;
+    }
 
     bench::printResult(bench::run(
         "add_batch_components_to_empty_entities",

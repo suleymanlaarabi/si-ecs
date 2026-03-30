@@ -105,6 +105,46 @@ Test(world_shrink, shrink_keeps_registered_system_queries_valid_after_removing_e
     cr_assert_eq(world.get<ShrinkPosition>(positionOnly).y, 200);
 }
 
+Test(world_shrink, shrink_invalidates_cached_table_transition_edges_for_component_mutations) {
+    World world;
+    world.registerComponent<ShrinkPosition>();
+    world.registerComponent<ShrinkVelocity>();
+    world.registerComponent<ShrinkShield>();
+    world.registerComponent<ShrinkBoost>();
+
+    const Entity positionOnly = world.createEntity();
+    const Entity cachedShield = world.createEntity();
+    const Entity mixed = world.createEntity();
+    const Entity tail = world.createEntity();
+
+    world.set(positionOnly, ShrinkPosition{.x = 1});
+    world.set(cachedShield, ShrinkPosition{.x = 2});
+    world.set(mixed, ShrinkPosition{.x = 3});
+    world.set(tail, ShrinkPosition{.x = 4});
+
+    world.set(cachedShield, ShrinkShield{.value = 7});
+
+    world.set(mixed, ShrinkVelocity{.dx = 5});
+    world.set(mixed, ShrinkShield{.value = 8});
+    world.remove<ShrinkVelocity>(mixed);
+    world.set(mixed, ShrinkVelocity{.dx = 6});
+
+    world.set(tail, ShrinkBoost{.value = 9});
+
+    world.destroyEntity(cachedShield);
+    world.shrink();
+
+    world.set(positionOnly, ShrinkShield{.value = 10});
+    cr_assert(world.has<ShrinkShield>(positionOnly));
+    cr_assert_not(world.has<ShrinkBoost>(positionOnly));
+    cr_assert_not(world.has<ShrinkVelocity>(positionOnly));
+
+    world.remove<ShrinkVelocity>(mixed);
+    cr_assert(world.has<ShrinkShield>(mixed));
+    cr_assert_not(world.has<ShrinkBoost>(mixed));
+    cr_assert_not(world.has<ShrinkVelocity>(mixed));
+}
+
 Test(world_shrink, shrink_keeps_component_migrations_and_future_matching_queries_working) {
     World world;
     world.registerComponent<ShrinkPosition>();

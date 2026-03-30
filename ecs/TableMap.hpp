@@ -1,4 +1,5 @@
 #pragma once
+#include <utility>
 #include <vector>
 
 #include "EcsAssert.hpp"
@@ -123,7 +124,7 @@ public:
         if (tid != lastTid) {
             eraseBucketAt(erasedBucket);
 
-            tables[tid] = tables[lastTid];
+            tables[tid] = std::move(tables[lastTid]);
             buckets[tables[tid].bucketIndex].tableId = tid;
         } else {
             eraseBucketAt(erasedBucket);

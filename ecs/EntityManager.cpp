@@ -187,11 +187,8 @@ void EntityManager::addBatchComponents(const Entity entity, const ComponentId* c
 
     EntityType type = mergeEntityTypeWithAdded(currentType, sortedAdded, static_cast<uint16_t>(addedCount));
 
-    bool isCreated = false;
-    const TableId newTid = this->findOrCreateTable(type, *this, isCreated).first;
-    if (!isCreated) {
-        type.release();
-    }
+    const TableId newTid = this->findOrCreateTable(type, *this).first;
+    type.release();
 
     this->migrateEntityRow(this->getTables()[currentTid], this->getTables()[newTid], record, entity);
     record.tid = newTid;
@@ -212,28 +209,39 @@ void EntityManager::addComponent(const Entity entity, const ComponentId cid) {
 
     EntityRecord& record = this->getEntityRecord(entity);
     const TableId currentTid = record.tid;
-    const Table& currentTable = this->getTables()[currentTid];
+    Table& currentTable = this->getTables()[currentTid];
 
     if (currentTable.hasComponent(cid)) {
         return;
     }
 
     const ComponentRecord& componentRecord = this->getComponentRecord(cid);
+    TableId newTid = InvalidTableId;
 
-    EntityType type = currentTable.getType().withAdd(cid);
-    if (!componentRecord.required.empty()) {
-        for (const ComponentId addCid : componentRecord.required) {
-            if (!currentTable.hasComponent(addCid)) {
-                type.add(addCid);
+    if (currentTable.addEdge.has(cid)) {
+        newTid = currentTable.addEdge.at(cid);
+    } else {
+        EntityType type = currentTable.getType().withAdd(cid);
+        if (!componentRecord.required.empty()) {
+            for (const ComponentId addCid : componentRecord.required) {
+                if (!currentTable.hasComponent(addCid)) {
+                    type.add(addCid);
+                }
             }
         }
+
+        newTid = this->findOrCreateTable(type, *this).first;
+        type.release();
+        this->getTables()[currentTid].addEdge.set(cid, newTid);
     }
 
-    const uint16_t insertIndex = type.findIndex(cid);
-    const TableId newTid = this->findOrCreateTable(type, *this).first;
-
-    this->migrateEntityRowAdd(this->getTables()[currentTid], this->getTables()[newTid],
-                              record, entity, insertIndex);
+    if (componentRecord.required.empty()) {
+        const uint16_t insertIndex = this->getTables()[newTid].getType().findIndex(cid);
+        this->migrateEntityRowAdd(this->getTables()[currentTid], this->getTables()[newTid],
+                                  record, entity, insertIndex);
+    } else {
+        this->migrateEntityRow(this->getTables()[currentTid], this->getTables()[newTid], record, entity);
+    }
     record.tid = newTid;
 
     if (componentRecord.onAdd) {
@@ -314,7 +322,8 @@ void EntityManager::removeComponent(const Entity entity, const ComponentId cid) 
 
     EntityRecord& record = this->getEntityRecord(entity);
     const TableId currentTid = record.tid;
-    const EntityType& currentType = this->getTables()[currentTid].getType();
+    Table& currentTable = this->getTables()[currentTid];
+    const EntityType& currentType = currentTable.getType();
     const uint16_t removeIndex = currentType.findIndex(cid);
 
     if (removeIndex == UINT16_MAX) {
@@ -325,8 +334,16 @@ void EntityManager::removeComponent(const Entity entity, const ComponentId cid) 
         componentRecord.onRemove) {
         componentRecord.onRemove(entity, this);
     }
-    const EntityType type = currentType.withRemove(cid);
-    const TableId newTid = this->findOrCreateTable(type, *this).first;
+    TableId newTid = InvalidTableId;
+
+    if (currentTable.removeEdge.has(cid)) {
+        newTid = currentTable.removeEdge.at(cid);
+    } else {
+        const EntityType type = currentType.withRemove(cid);
+        newTid = this->findOrCreateTable(type, *this).first;
+        type.release();
+        this->getTables()[currentTid].removeEdge.set(cid, newTid);
+    }
 
     this->migrateEntityRowRemove(this->getTables()[currentTid],
                                  this->getTables()[newTid],

@@ -68,27 +68,49 @@ void World::removeTableIfEmpty(const TableId tid) {
     if (this->tables_map.tables[tid].count != 0) {
         return;
     }
+    const EntityType removedType = this->tables_map.tables[tid].getType().clone();
     const TableId swapped = this->tables_map.remove(tid);
 
-    const Table& table = this->tables_map.tables[tid];
+    for (uint16_t i = 0; i < removedType.count; ++i) {
+        this->getComponentRecord(removedType.cids[i]).tables.remove(tid);
+    }
 
-    const EntityType& type = table.getType();
+    if (swapped != InvalidTableId) {
+        Table& movedTable = this->tables_map.tables[tid];
+        const EntityType& movedType = movedTable.getType();
 
-    for (uint i = 0; i < type.count; i++) {
-        ComponentRecord& record = this->getComponentRecord(type.cids[i]);
-        record.tables.remove(tid);
-        record.tables.replace(swapped, tid);
+        for (uint16_t i = 0; i < movedType.count; ++i) {
+            this->getComponentRecord(movedType.cids[i]).tables.replace(swapped, tid);
+        }
+
+        for (EntityRow row = 0; row < movedTable.size(); ++row) {
+            this->getEntityRecord(movedTable.getEntities()[row]).tid = tid;
+        }
     }
 
     for (auto& [query, tables] : this->getQueries()) {
         tables.remove(tid);
         tables.replace(swapped, tid);
     }
+
+    removedType.release();
 }
 
 void World::shrink() {
     std::vector<Table>& tables = this->tables_map.tables;
+    bool removedTable = false;
     for (uint i = 0; i < tables.size(); i++) {
+        const size_t before = tables.size();
         this->removeTableIfEmpty(i);
+        removedTable |= tables.size() != before;
+    }
+
+    if (!removedTable) {
+        return;
+    }
+
+    for (Table& table : tables) {
+        table.addEdge.reset();
+        table.removeEdge.reset();
     }
 }
