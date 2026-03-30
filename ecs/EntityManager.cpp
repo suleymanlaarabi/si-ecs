@@ -1,8 +1,46 @@
 #include "EntityManager.hpp"
+#include <algorithm>
 #include <cstring>
 #include "ComponentRegistry.hpp"
 #include "EcsAssert.hpp"
 #include "TableRegistry.hpp"
+
+namespace {
+[[nodiscard]] EntityType mergeEntityTypeWithAdded(const EntityType& currentType,
+                                                  const ComponentId* sortedAdded,
+                                                  const uint16_t addedCount) {
+    ecs_assert(static_cast<uint32_t>(currentType.count) + addedCount <= UINT16_MAX, "entity type limit reached");
+
+    EntityType merged = {
+        .cids = static_cast<ComponentId*>(malloc(sizeof(ComponentId) * (currentType.count + addedCount))),
+        .count = static_cast<uint16_t>(currentType.count + addedCount)
+    };
+
+    uint16_t currentIndex = 0;
+    uint16_t addedIndex = 0;
+    uint16_t outIndex = 0;
+
+    while (currentIndex < currentType.count && addedIndex < addedCount) {
+        if (currentType.cids[currentIndex] < sortedAdded[addedIndex]) {
+            merged.cids[outIndex++] = currentType.cids[currentIndex++];
+        } else {
+            merged.cids[outIndex++] = sortedAdded[addedIndex++];
+        }
+    }
+
+    if (currentIndex < currentType.count) {
+        std::memcpy(merged.cids + outIndex, currentType.cids + currentIndex,
+                    sizeof(ComponentId) * (currentType.count - currentIndex));
+        outIndex = static_cast<uint16_t>(outIndex + (currentType.count - currentIndex));
+    }
+
+    if (addedIndex < addedCount) {
+        std::memcpy(merged.cids + outIndex, sortedAdded + addedIndex, sizeof(ComponentId) * (addedCount - addedIndex));
+    }
+
+    return merged;
+}
+}
 
 void EntityManager::finalizeRowMigration(Table& from, EntityRecord& record, const Entity entity,
                                          const EntityRow newRow) {
@@ -84,39 +122,70 @@ void EntityManager::addBatchComponents(const Entity entity, const ComponentId* c
     EntityRecord& record = this->getEntityRecord(entity);
     const TableId currentTid = record.tid;
     const Table& currentTable = this->getTables()[currentTid];
-
-    EntityType type = currentTable.getType().clone();
+    const EntityType& currentType = currentTable.getType();
 
     tmpAllocator.release();
-    uint addedCount = 0;
-    auto pushAddedRecord = [&](ComponentRecord& componentRecord) {
-        *static_cast<ComponentRecord**>(tmpAllocator.allocate(sizeof(ComponentRecord*))) = &componentRecord;
-        addedCount += 1;
-    };
+    uint32_t maxAddedCount = 0;
 
-    for (uint i = 0; i < cidCount; i++) {
-        if (type.findIndex(cids[i]) != UINT16_MAX) {
+    for (uint32_t i = 0; i < cidCount; ++i) {
+        const ComponentId cid = cids[i];
+        ecs_assert(this->isComponentRegistered(cid), "component is not registered");
+        if (currentTable.hasComponent(cid)) {
             continue;
         }
-        type.add(cids[i]);
-        ComponentRecord& componentRecord = this->getComponentRecord(cids[i]);
-        pushAddedRecord(componentRecord);
+
+        maxAddedCount += 1;
+        maxAddedCount += this->getComponentRecord(cid).required.size;
+    }
+
+    if (maxAddedCount == 0) {
+        return;
+    }
+
+    auto* addedCids = static_cast<ComponentId*>(tmpAllocator.allocate(sizeof(ComponentId) * maxAddedCount));
+    uint64_t seen[(UINT16_MAX + 1u) / 64u] = {};
+    uint32_t addedCount = 0;
+
+    auto pushAddedCid = [&](const ComponentId cid) {
+        const uint32_t word = cid / 64u;
+        const uint64_t mask = uint64_t{1} << (cid % 64u);
+
+        if ((seen[word] & mask) != 0) {
+            return;
+        }
+
+        seen[word] |= mask;
+        addedCids[addedCount++] = cid;
+    };
+
+    for (uint32_t i = 0; i < cidCount; ++i) {
+        const ComponentId cid = cids[i];
+        if (currentTable.hasComponent(cid)) {
+            continue;
+        }
+
+        pushAddedCid(cid);
+        const ComponentRecord& componentRecord = this->getComponentRecord(cid);
         if (!componentRecord.required.empty()) {
             for (const ComponentId addCid : componentRecord.required) {
-                if (type.findIndex(addCid) != UINT16_MAX) {
+                if (currentTable.hasComponent(addCid)) {
                     continue;
                 }
-                type.add(addCid);
-                pushAddedRecord(this->getComponentRecord(addCid));
+                pushAddedCid(addCid);
             }
         }
     }
 
     if (addedCount == 0) {
-        type.release();
         tmpAllocator.release();
         return;
     }
+
+    auto* sortedAdded = static_cast<ComponentId*>(tmpAllocator.allocate(sizeof(ComponentId) * addedCount));
+    std::memcpy(sortedAdded, addedCids, sizeof(ComponentId) * addedCount);
+    std::sort(sortedAdded, sortedAdded + addedCount);
+
+    EntityType type = mergeEntityTypeWithAdded(currentType, sortedAdded, static_cast<uint16_t>(addedCount));
 
     bool isCreated = false;
     const TableId newTid = this->findOrCreateTable(type, *this, isCreated).first;
@@ -127,13 +196,11 @@ void EntityManager::addBatchComponents(const Entity entity, const ComponentId* c
     this->migrateEntityRow(this->getTables()[currentTid], this->getTables()[newTid], record, entity);
     record.tid = newTid;
 
-    const auto records = reinterpret_cast<ComponentRecord**>(tmpAllocator.data);
-    for (uint i = 0; i < addedCount; i++) {
-        if (records[i]->onAdd) {
-            records[i]->onAdd(entity, this);
+    for (uint32_t i = 0; i < addedCount; ++i) {
+        if (const ComponentRecord& componentRecord = this->getComponentRecord(addedCids[i]); componentRecord.onAdd) {
+            componentRecord.onAdd(entity, this);
         }
     }
-
 
     tmpAllocator.release();
 }

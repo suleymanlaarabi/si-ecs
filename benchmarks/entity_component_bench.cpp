@@ -19,6 +19,13 @@ void registerBenchComponentsUpTo(World& world, const uint32_t count, std::index_
 }
 
 template <size_t... I>
+void addBenchComponentsUpTo(World& world, const Entity entity, const uint32_t count, std::index_sequence<I...>) {
+    ((I < bench::BenchComponentCount && I < count
+          ? (world.add<bench::BenchComponent<I>>(entity), void())
+          : void()), ...);
+}
+
+template <size_t... I>
 void setBenchComponentsUpTo(World& world, const Entity entity, const uint32_t count, std::index_sequence<I...>) {
     ((I < bench::BenchComponentCount && I < count
           ? (world.set<bench::BenchComponent<I>>(entity, bench::BenchComponent<I>{static_cast<uint32_t>(entity.index + I)}), void())
@@ -32,6 +39,15 @@ void removeBenchComponentsUpTo(World& world, const Entity entity, const uint32_t
 
 void prepareWorld(World& world, const EntityBenchConfig& config) {
     registerBenchComponentsUpTo(world, config.componentCount, bench::BenchComponentIndex{});
+}
+
+template <size_t... I>
+uint32_t fillBenchComponentIdsUpTo(ComponentId* ids, const uint32_t count, std::index_sequence<I...>) {
+    uint32_t written = 0;
+    ((I < bench::BenchComponentCount && I < count
+          ? (ids[written++] = ComponentRegistry::id<bench::BenchComponent<I>>(), void())
+          : void()), ...);
+    return written;
 }
 
 std::vector<Entity> createEmptyEntities(World& world, const uint32_t count) {
@@ -105,6 +121,69 @@ int main(const int argc, char** argv) {
     bench::printConfigValue("samples", config.samples);
     bench::printConfigValue("entities", config.entityCount);
     bench::printConfigValue("components", config.componentCount);
+
+    bench::printResult(bench::run(
+        "add_components_individually_to_empty_entities",
+        config.samples,
+        static_cast<uint64_t>(config.entityCount) * config.componentCount,
+        [&]() -> uint64_t {
+            World world;
+            prepareWorld(world, config);
+            const auto entities = createEmptyEntities(world, config.entityCount);
+
+            for (const Entity entity : entities) {
+                addBenchComponentsUpTo(world, entity, config.componentCount, bench::BenchComponentIndex{});
+            }
+
+            return static_cast<uint64_t>(world.getTables().size());
+        }
+    ));
+
+    bench::printResult(bench::run(
+        "add_batch_components_to_empty_entities",
+        config.samples,
+        static_cast<uint64_t>(config.entityCount) * config.componentCount,
+        [&]() -> uint64_t {
+            World world;
+            prepareWorld(world, config);
+            const auto entities = createEmptyEntities(world, config.entityCount);
+            ComponentId batchIds[bench::BenchComponentCount];
+            const uint32_t batchCount = fillBenchComponentIdsUpTo(batchIds, config.componentCount,
+                                                                  bench::BenchComponentIndex{});
+
+            for (const Entity entity : entities) {
+                world.addBatchComponents(entity, batchIds, batchCount);
+            }
+
+            return static_cast<uint64_t>(world.getTables().size());
+        }
+    ));
+
+    bench::printResult(bench::run(
+        "add_batch_components_to_half_populated_entities",
+        config.samples,
+        static_cast<uint64_t>(config.entityCount) * (config.componentCount / 2),
+        [&]() -> uint64_t {
+            World world;
+            prepareWorld(world, config);
+            const auto entities = createEmptyEntities(world, config.entityCount);
+            const uint32_t initialCount = config.componentCount / 2;
+            const uint32_t batchCount = config.componentCount - initialCount;
+            ComponentId batchIds[bench::BenchComponentCount];
+            const uint32_t filledCount = fillBenchComponentIdsUpTo(batchIds, config.componentCount,
+                                                                   bench::BenchComponentIndex{});
+
+            for (const Entity entity : entities) {
+                addBenchComponentsUpTo(world, entity, initialCount, bench::BenchComponentIndex{});
+            }
+
+            for (const Entity entity : entities) {
+                world.addBatchComponents(entity, batchIds + initialCount, filledCount - initialCount);
+            }
+
+            return static_cast<uint64_t>(world.getTables().size());
+        }
+    ));
 
     bench::printResult(bench::run(
         "add_components_to_existing_entities",

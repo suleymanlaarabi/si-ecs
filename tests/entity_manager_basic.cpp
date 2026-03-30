@@ -78,7 +78,7 @@ Test(entity_manager, add_batch_components_migrates_once_and_keeps_existing_data)
     position->x = 7;
     position->y = 9;
 
-    const ComponentId batch[] = {velocityId, accelerationId};
+    const ComponentId batch[] = {accelerationId, velocityId};
     manager.addBatchComponents(entity, batch, 2);
 
     position = static_cast<Position*>(manager.getComponent(entity, positionId));
