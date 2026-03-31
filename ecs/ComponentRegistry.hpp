@@ -17,7 +17,6 @@ struct ComponentRecord {
     uint16_t size = 0;
 };
 
-
 template <typename Component>
 concept HasOnAdd = requires(Entity entity, World& world) {
     { Component::onAdd(entity, world) };
@@ -59,6 +58,7 @@ public:
             return;
         }
         ComponentRecord record;
+
 
         if constexpr (HasOnAdd<Component>) {
             record.onAdd = reinterpret_cast<void(*)(Entity entity, void*)>(Component::onAdd);

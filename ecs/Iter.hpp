@@ -1,7 +1,5 @@
 #pragma once
 #include <functional>
-#include <utility>
-
 #include "Query.hpp"
 
 class Table;

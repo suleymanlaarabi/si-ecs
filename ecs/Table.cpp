@@ -4,38 +4,39 @@
 #include "ComponentRegistry.hpp"
 
 namespace {
-void releaseTableStorage(Table& table) {
-    table.type.release();
-    if (table.columns != nullptr) {
-        for (uint64_t i = 0; i < table.type.count; ++i) {
-            free(table.columns[i].data);
+    void releaseTableStorage(Table& table) {
+        table.type.release();
+        delete table.edges;
+        if (table.columns != nullptr) {
+            for (uint64_t i = 0; i < table.type.count; ++i) {
+                free(table.columns[i].data);
+            }
         }
+        free(table.columns);
+        free(table.entities);
+        table.type = {};
+        table.entities = nullptr;
+        table.columns = nullptr;
+        table.edges = nullptr;
+        table.bucketIndex = 0;
+        table.count = 0;
+        table.capacity = 0;
+        table.bloom = 0;
     }
-    free(table.columns);
-    free(table.entities);
-    table.type = {};
-    table.entities = nullptr;
-    table.columns = nullptr;
-    table.bucketIndex = 0;
-    table.count = 0;
-    table.capacity = 0;
-    table.bloom = 0;
-}
 }
 
-Table::Table(const EntityType type, ComponentRegistry& componentRegistry,
-             const TableId tid) noexcept : indices(type.min(), type.max()),
-                                           removeEdge(type.min(), type.max()) {
-    this->type = type.clone();
+Table::Table(EntityType&& type, ComponentRegistry& componentRegistry,
+             const TableId tid) noexcept {
+    this->type = type;
+    type = {};
     this->columns = static_cast<Column*>(malloc(sizeof(Column) * this->type.count));
     this->capacity = 1;
     this->entities = static_cast<Entity*>(malloc(sizeof(Entity)));
 
-    this->bloom = bloomFromEntityType(type);
+    this->bloom = bloomFromEntityType(this->type);
     for (uint i = 0; i < this->type.count; i++) {
         ComponentRecord& componentRecord = componentRegistry.getComponentRecord(this->type.cids[i]);
         componentRecord.tables.push_back(tid);
-        this->indices.set(type.cids[i], i);
 
         const size_t size = componentRecord.size;
         this->columns[i].data = nullptr;
@@ -47,18 +48,17 @@ Table::Table(const EntityType type, ComponentRegistry& componentRegistry,
 }
 
 Table::Table(Table&& other) noexcept : type(other.type),
-                                       indices(std::move(other.indices)),
                                        entities(other.entities),
                                        columns(other.columns),
+                                       edges(other.edges),
                                        bucketIndex(other.bucketIndex),
                                        count(other.count),
                                        capacity(other.capacity),
-                                       addEdge(std::move(other.addEdge)),
-                                       removeEdge(std::move(other.removeEdge)),
                                        bloom(other.bloom) {
     other.type = {};
     other.entities = nullptr;
     other.columns = nullptr;
+    other.edges = nullptr;
     other.bucketIndex = 0;
     other.count = 0;
     other.capacity = 0;
@@ -72,19 +72,18 @@ Table& Table::operator=(Table&& other) noexcept {
 
     releaseTableStorage(*this);
     this->type = other.type;
-    this->indices = std::move(other.indices);
     this->entities = other.entities;
     this->columns = other.columns;
+    this->edges = other.edges;
     this->bucketIndex = other.bucketIndex;
     this->count = other.count;
     this->capacity = other.capacity;
-    this->addEdge = std::move(other.addEdge);
-    this->removeEdge = std::move(other.removeEdge);
     this->bloom = other.bloom;
 
     other.type = {};
     other.entities = nullptr;
     other.columns = nullptr;
+    other.edges = nullptr;
     other.bucketIndex = 0;
     other.count = 0;
     other.capacity = 0;
@@ -164,11 +163,11 @@ void* Table::getComponentByIndex(const EntityRow row, const uint16_t columnIndex
 }
 
 void* Table::getColumn(const ComponentId cid) const {
-    return this->columns[this->indices.at(cid)].data;
+    return this->columns[this->type.findIndex(cid)].data;
 }
 
 void* Table::getComponent(const EntityRow row, const ComponentId cid) const {
-    return this->getComponentByIndex(row, this->indices.at(cid));
+    return this->getComponentByIndex(row, this->type.findIndex(cid));
 }
 
 [[nodiscard]] Entity* Table::getEntities() const {
@@ -180,5 +179,43 @@ void* Table::getComponent(const EntityRow row, const ComponentId cid) const {
 }
 
 [[nodiscard]] bool Table::hasComponent(const ComponentId cid) const {
-    return this->indices.has(cid);
+    return this->type.findIndex(cid) != UINT16_MAX;
+}
+
+[[nodiscard]] bool Table::hasAddEdge(const ComponentId cid) const {
+    return this->edges != nullptr && this->edges->add.has(cid);
+}
+
+[[nodiscard]] TableId Table::getAddEdge(const ComponentId cid) const {
+    return this->edges->add.at(cid);
+}
+
+void Table::setAddEdge(const ComponentId cid, const TableId tid) {
+    if (this->edges == nullptr) {
+        this->edges = new TableEdges();
+    }
+    this->edges->add.set(cid, tid);
+}
+
+[[nodiscard]] bool Table::hasRemoveEdge(const ComponentId cid) const {
+    return this->edges != nullptr && this->edges->remove.has(cid);
+}
+
+[[nodiscard]] TableId Table::getRemoveEdge(const ComponentId cid) const {
+    return this->edges->remove.at(cid);
+}
+
+void Table::setRemoveEdge(const ComponentId cid, const TableId tid) {
+    if (this->edges == nullptr) {
+        this->edges = new TableEdges();
+    }
+    this->edges->remove.set(cid, tid);
+}
+
+void Table::resetEdges() const {
+    if (this->edges == nullptr) {
+        return;
+    }
+    this->edges->add.reset();
+    this->edges->remove.reset();
 }

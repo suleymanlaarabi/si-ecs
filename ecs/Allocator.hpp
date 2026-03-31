@@ -3,7 +3,6 @@
 
 #include "ComponentRegistry.hpp"
 
-
 struct TempAllocator {
     std::byte* data = static_cast<std::byte*>(malloc(16));
     std::byte* current = data;

@@ -1,30 +1,27 @@
 #pragma once
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
 class SparseIndices {
     uint16_t* indices = nullptr;
-    uint16_t min = 0;
-    uint16_t max = 0;
+    size_t capacity = 0;
+    size_t count = 0;
 
 public:
-    SparseIndices() = default;
-
-    SparseIndices(const uint16_t min, const uint16_t max) {
-        this->grow(min, max);
-    };
+    explicit SparseIndices() {
+        this->grow(4);
+    }
 
     SparseIndices(const SparseIndices&) = delete;
     SparseIndices& operator=(const SparseIndices&) = delete;
 
     SparseIndices(SparseIndices&& other) noexcept {
         this->indices = other.indices;
-        this->min = other.min;
-        this->max = other.max;
+        this->capacity = other.capacity;
+        this->count = other.count;
         other.indices = nullptr;
-        other.min = 0;
-        other.max = 0;
+        other.capacity = 0;
+        other.count = 0;
     }
 
     SparseIndices& operator=(SparseIndices&& other) noexcept {
@@ -34,11 +31,11 @@ public:
 
         delete[] this->indices;
         this->indices = other.indices;
-        this->min = other.min;
-        this->max = other.max;
+        this->capacity = other.capacity;
+        this->count = other.count;
         other.indices = nullptr;
-        other.min = 0;
-        other.max = 0;
+        other.capacity = 0;
+        other.count = 0;
         return *this;
     }
 
@@ -47,54 +44,51 @@ public:
     }
 
     [[nodiscard]] uint16_t at(const uint16_t id) const {
-        if (!this->indices || id < min || id > max) {
+        if (id >= this->count) {
             return UINT16_MAX;
         }
-        return this->indices[id - min];
+        return this->indices[id];
     }
 
     [[nodiscard]] bool has(const uint16_t id) const {
-        if (!this->indices || id < min || id > max) {
+        if (id >= this->count) {
             return false;
         }
-        return this->indices[id - min] != UINT16_MAX;
+        return this->indices[id] != UINT16_MAX;
     }
 
     void set(const uint16_t id, const uint16_t value) {
-        if (!this->indices || id < min || id > max) {
-            this->grow(id, id);
+        if (id >= this->capacity) {
+            size_t newCapacity = (this->capacity == 0) ? 1 : this->capacity;
+            while (id >= newCapacity) {
+                newCapacity *= 2;
+            }
+            this->grow(newCapacity);
         }
-        this->indices[id - min] = value;
+        if (id >= this->count) {
+            memset(this->indices + this->count, 0xFF, static_cast<size_t>(id - this->count + 1) * sizeof(uint16_t));
+            this->count = static_cast<size_t>(id) + 1;
+        }
+        this->indices[id] = value;
     }
 
     void reset() {
-        if (!this->indices) {
+        if (this->count == 0) {
             return;
         }
-        memset(this->indices, 0xFF, static_cast<size_t>(max - min + 1) * sizeof(uint16_t));
+        memset(this->indices, 0xFF, static_cast<size_t>(this->count) * sizeof(uint16_t));
+        this->count = 0;
     }
 
 private:
-    void grow(const uint16_t newMin, const uint16_t newMax) {
-        if (!this->indices) {
-            this->min = newMin;
-            this->max = newMax;
-            const auto count = static_cast<size_t>(newMax - newMin + 1);
-            this->indices = new uint16_t[count];
-            memset(this->indices, 0xFF, count * sizeof(uint16_t));
-            return;
+    void grow(const size_t newCapacity) {
+        auto* grown = new uint16_t[newCapacity];
+        memset(grown, 0xFF, static_cast<size_t>(newCapacity) * sizeof(uint16_t));
+        if (this->count != 0) {
+            memcpy(grown, this->indices, static_cast<size_t>(this->count) * sizeof(uint16_t));
         }
-
-        const uint16_t grownMin = std::min(this->min, newMin);
-        const uint16_t grownMax = std::max(this->max, newMax);
-        const auto grownCount = static_cast<size_t>(grownMax - grownMin + 1);
-        auto* grown = new uint16_t[grownCount];
-        memset(grown, 0xFF, grownCount * sizeof(uint16_t));
-        memcpy(grown + (this->min - grownMin), this->indices,
-               static_cast<size_t>(this->max - this->min + 1) * sizeof(uint16_t));
         delete[] this->indices;
         this->indices = grown;
-        this->min = grownMin;
-        this->max = grownMax;
+        this->capacity = newCapacity;
     }
 };

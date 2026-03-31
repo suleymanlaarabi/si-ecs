@@ -14,9 +14,27 @@ struct EntityBenchConfig {
     bool onlyAddRemove = false;
 };
 
+struct SharedBatchRequirement {
+    uint32_t value = 0;
+};
+
+template <size_t I>
+struct SharedBatchDependent : Required<SharedBatchRequirement> {
+    uint32_t value = static_cast<uint32_t>(I);
+};
+
+constexpr uint32_t SharedBatchDependentCount = 16;
+using SharedBatchDependentIndex = std::make_index_sequence<SharedBatchDependentCount>;
+
 template <size_t... I>
 void registerBenchComponentsUpTo(World& world, const uint32_t count, std::index_sequence<I...>) {
     ((I < bench::BenchComponentCount && I < count ? (world.registerComponent<bench::BenchComponent<I>>(), void()) : void()), ...);
+}
+
+template <size_t... I>
+void registerSharedBatchDependents(World& world, std::index_sequence<I...>) {
+    world.registerComponent<SharedBatchRequirement>();
+    (world.registerComponent<SharedBatchDependent<I>>(), ...);
 }
 
 template <size_t... I>
@@ -48,6 +66,14 @@ uint32_t fillBenchComponentIdsUpTo(ComponentId* ids, const uint32_t count, std::
     ((I < bench::BenchComponentCount && I < count
           ? (ids[written++] = ComponentRegistry::id<bench::BenchComponent<I>>(), void())
           : void()), ...);
+    return written;
+}
+
+template <size_t... I>
+uint32_t fillDuplicatedSharedDependentIds(ComponentId* ids, std::index_sequence<I...>) {
+    uint32_t written = 0;
+    ((ids[written++] = ComponentRegistry::id<SharedBatchDependent<I>>(),
+      ids[written++] = ComponentRegistry::id<SharedBatchDependent<I>>()), ...);
     return written;
 }
 
@@ -211,6 +237,26 @@ int main(const int argc, char** argv) {
 
             for (const Entity entity : entities) {
                 world.addBatchComponents(entity, batchIds + initialCount, filledCount - initialCount);
+            }
+
+            return static_cast<uint64_t>(world.getTables().size());
+        }
+    ));
+
+    bench::printResult(bench::run(
+        "add_batch_components_with_duplicates_and_shared_required",
+        config.samples,
+        static_cast<uint64_t>(config.entityCount) * (SharedBatchDependentCount * 2),
+        [&]() -> uint64_t {
+            World world;
+            prepareWorld(world, config);
+            registerSharedBatchDependents(world, SharedBatchDependentIndex{});
+            const auto entities = createEmptyEntities(world, config.entityCount);
+            ComponentId batchIds[SharedBatchDependentCount * 2];
+            const uint32_t batchCount = fillDuplicatedSharedDependentIds(batchIds, SharedBatchDependentIndex{});
+
+            for (const Entity entity : entities) {
+                world.addBatchComponents(entity, batchIds, batchCount);
             }
 
             return static_cast<uint64_t>(world.getTables().size());

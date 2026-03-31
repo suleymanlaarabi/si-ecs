@@ -16,22 +16,22 @@ struct Column {
 
 class ComponentRegistry;
 
+struct TableEdges {
+    SparseIndices add;
+    SparseIndices remove;
+};
+
 struct Table {
     EntityType type;
-    SparseIndices indices;
     Entity* entities = nullptr;
     Column* columns = nullptr;
+    TableEdges* edges = nullptr;
     uint32_t bucketIndex = 0; // used for TableMap.hpp
-    uint64_t count = 0;
-    uint64_t capacity = 0;
-    SparseIndices addEdge; // cid -> tid
-    SparseIndices removeEdge; // cid -> tid
-
-    void growIfNeeded();
-
-public:
+    uint32_t count = 0;
+    uint32_t capacity = 0;
     BloomFilter bloom;
-    explicit Table(EntityType type, ComponentRegistry& componentRegistry, TableId tid) noexcept;
+
+    explicit Table(EntityType&& type, ComponentRegistry& componentRegistry, TableId tid) noexcept;
     Table(const Table&) = delete;
     Table& operator=(const Table&) = delete;
     Table(Table&& other) noexcept;
@@ -47,8 +47,18 @@ public:
     [[nodiscard]] Entity* getEntities() const;
     [[nodiscard]] const EntityType& getType() const noexcept;
     [[nodiscard]] bool hasComponent(ComponentId cid) const;
+    [[nodiscard]] bool hasAddEdge(ComponentId cid) const;
+    [[nodiscard]] TableId getAddEdge(ComponentId cid) const;
+    void setAddEdge(ComponentId cid, TableId tid);
+    [[nodiscard]] bool hasRemoveEdge(ComponentId cid) const;
+    [[nodiscard]] TableId getRemoveEdge(ComponentId cid) const;
+    void setRemoveEdge(ComponentId cid, TableId tid);
+    void resetEdges() const;
 
     [[nodiscard]] uint size() const noexcept {
         return count;
     };
+
+private:
+    void growIfNeeded();
 };

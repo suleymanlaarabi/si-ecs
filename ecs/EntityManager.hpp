@@ -1,6 +1,6 @@
 #pragma once
+#include <memory>
 #include <utility>
-
 #include "Allocator.hpp"
 #include "ComponentRegistry.hpp"
 #include "EntityRegistry.hpp"
@@ -9,11 +9,14 @@
 
 class EntityManager : public EntityRegistry, public ComponentRegistry, public TableRegistry {
     TempAllocator tmpAllocator;
+    std::unique_ptr<uint32_t[]> batchSeenMarks = std::make_unique<uint32_t[]>(static_cast<size_t>(UINT16_MAX) + 1u);
+    uint32_t batchSeenGeneration = 0;
+
+    void beginBatchDedupPass();
+    [[nodiscard]] bool markBatchComponentSeen(ComponentId cid);
     void finalizeRowMigration(Table& from, EntityRecord& record, Entity entity, EntityRow newRow);
-    void migrateEntityRowAdd(Table& from, Table& to, EntityRecord& record, Entity entity,
-                             uint16_t insertIndex);
-    void migrateEntityRowRemove(Table& from, Table& to, EntityRecord& record, const Entity entity,
-                                const uint16_t removeIndex);
+    void migrateEntityRowAdd(Table& from, Table& to, EntityRecord& record, Entity entity, uint16_t insertIndex);
+    void migrateEntityRowRemove(Table& from, Table& to, EntityRecord& record, Entity entity, uint16_t removeIndex);
     void migrateEntityRow(Table& from, Table& to, EntityRecord& record, Entity entity);
 
 public:

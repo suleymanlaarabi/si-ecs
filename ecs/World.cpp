@@ -110,7 +110,6 @@ void World::shrink() {
     }
 
     for (Table& table : tables) {
-        table.addEdge.reset();
-        table.removeEdge.reset();
+        table.resetEdges();
     }
 }

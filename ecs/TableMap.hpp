@@ -94,11 +94,41 @@ struct TableMap {
             }
 
             newBuckets[newIdx] = oldBucket;
+            tables[oldBucket.tableId].bucketIndex = newIdx;
         }
 
         delete[] buckets;
         buckets = newBuckets;
         size = newSize;
+    }
+
+    [[nodiscard]] inline uint32_t findBucketIndex(const EntityType& e, const uint64_t hash) const {
+        const uint32_t mask = size - 1u;
+        uint32_t idx = hash & mask;
+
+        while (true) {
+            const Bucket& b = buckets[idx];
+            if (b.tableId == InvalidTableId || (b.hash == hash && e == tables[b.tableId].getType())) {
+                return idx;
+            }
+            idx = (idx + 1) & mask;
+        }
+    }
+
+    [[nodiscard]] inline std::pair<TableId, Table&> createAt(const uint32_t idx, const uint64_t hash,
+                                                             EntityType&& ownedType,
+                                                             ComponentRegistry& componentRegistry,
+                                                             bool& isCreated) {
+        Bucket& bucket = buckets[idx];
+        ecs_assert(tables.size() <= UINT16_MAX, "table id limit reached");
+        const auto tid = static_cast<TableId>(tables.size());
+        Table& table = tables.emplace_back(std::move(ownedType), componentRegistry, tid);
+        table.bucketIndex = idx;
+        bucket.tableId = tid;
+        bucket.hash = hash;
+        count += 1;
+        isCreated = true;
+        return {tid, table};
     }
 
 public:
@@ -136,57 +166,24 @@ public:
 
     [[nodiscard]] inline bool contains(const EntityType& e) const {
         const uint64_t hash = hashEntityType(e);
-        const uint32_t mask = size - 1u;
-        uint32_t idx = hash & mask;
-        const uint32_t start = idx;
-
-        while (true) {
-            const Bucket& b = buckets[idx];
-
-            if (b.tableId == InvalidTableId) {
-                return false;
-            }
-
-            if (b.hash == hash && e == this->tables[b.tableId].getType()) {
-                return true;
-            }
-            idx = (idx + 1) & mask;
-            if (idx == start) {
-                return false;
-            }
-        }
+        return buckets[findBucketIndex(e, hash)].tableId != InvalidTableId;
     }
 
-    [[nodiscard]] inline std::pair<TableId, Table&> findOrCreate(EntityType e, ComponentRegistry& componentRegistry,
+    [[nodiscard]] inline std::pair<TableId, Table&> findOrCreate(EntityType&& e,
+                                                                 ComponentRegistry& componentRegistry,
                                                                  bool& isCreated) {
         if ((count + 1) * 2 > size) {
             growBuckets();
         }
 
         const uint64_t hash = hashEntityType(e);
-        const uint32_t mask = size - 1u;
-        uint32_t idx = hash & mask;
-
-        while (true) {
-            Bucket& b = buckets[idx];
-
-            if (b.tableId == InvalidTableId) {
-                ecs_assert(tables.size() <= UINT16_MAX, "table id limit reached");
-                const auto tid = static_cast<TableId>(tables.size());
-                Table& table = tables.emplace_back(e, componentRegistry, tid);
-                table.bucketIndex = idx;
-                b.tableId = tid;
-                b.hash = hash;
-                count += 1;
-                isCreated = true;
-                return {tid, table};
-            }
-
-            if (b.hash == hash && e == this->tables[b.tableId].getType()) {
-                return {b.tableId, this->tables[b.tableId]};
-            }
-
-            idx = (idx + 1) & mask;
+        const uint32_t idx = findBucketIndex(e, hash);
+        if (const Bucket& bucket = buckets[idx]; bucket.tableId != InvalidTableId) {
+            e.release();
+            e = {};
+            return {bucket.tableId, tables[bucket.tableId]};
         }
+
+        return createAt(idx, hash, std::move(e), componentRegistry, isCreated);
     }
 };
