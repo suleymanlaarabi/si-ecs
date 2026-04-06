@@ -1,6 +1,6 @@
 #include <criterion/criterion.h>
 
-#include "ecs/EntityManager.hpp"
+#include "ecs/core/entity/EntityManager.hpp"
 
 struct Position {
     int x;

@@ -3,9 +3,9 @@
 #include <initializer_list>
 #include <vector>
 
-#include "../ecs/ComponentRegistry.hpp"
-#include "../ecs/EcsType.hpp"
-#include "../ecs/TableMap.hpp"
+#include "ecs/core/component/ComponentRegistry.hpp"
+#include "ecs/core/base/EcsType.hpp"
+#include "ecs/core/storage/TableMap.hpp"
 
 struct TableMapPosition {
     int x;

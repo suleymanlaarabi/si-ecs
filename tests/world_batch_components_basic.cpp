@@ -1,8 +1,8 @@
 #include <criterion/criterion.h>
 
-#include "../ecs/ComponentRegistry.hpp"
-#include "../ecs/EcsType.hpp"
-#include "../ecs/World.hpp"
+#include "ecs/core/component/ComponentRegistry.hpp"
+#include "ecs/core/base/EcsType.hpp"
+#include "ecs/World.hpp"
 
 namespace {
     struct BatchTracked {

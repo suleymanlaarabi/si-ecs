@@ -1,7 +1,7 @@
 #include <criterion/criterion.h>
 
-#include "../ecs/EcsType.hpp"
-#include "../ecs/World.hpp"
+#include "ecs/core/base/EcsType.hpp"
+#include "ecs/World.hpp"
 
 
 Test(world, relate_creates_target_and_source_components) {

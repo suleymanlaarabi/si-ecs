@@ -4,27 +4,27 @@
 #include "ecs/World.hpp"
 
 namespace {
-struct ShrinkPosition {
-    int x = 0;
-    int y = 0;
-};
+    struct ShrinkPosition {
+        int x = 0;
+        int y = 0;
+    };
 
-struct ShrinkVelocity {
-    int dx = 0;
-    int dy = 0;
-};
+    struct ShrinkVelocity {
+        int dx = 0;
+        int dy = 0;
+    };
 
-struct ShrinkBoost {
-    int value = 0;
-};
+    struct ShrinkBoost {
+        int value = 0;
+    };
 
-struct ShrinkShield {
-    int value = 0;
-};
+    struct ShrinkShield {
+        int value = 0;
+    };
 
-struct ShrinkTag {
-    int value = 0;
-};
+    struct ShrinkTag {
+        int value = 0;
+    };
 }
 
 Test(world_shrink, shrink_keeps_registered_system_queries_valid_after_removing_empty_swapped_table) {
@@ -34,20 +34,20 @@ Test(world_shrink, shrink_keeps_registered_system_queries_valid_after_removing_e
     world.registerComponent<ShrinkBoost>();
     world.registerComponent<ShrinkShield>();
 
-    int movingRuns = 0;
-    int boostedRuns = 0;
+    static int movingRuns = 0;
+    static int boostedRuns = 0;
 
-    world.system(Phase::Update, each([&](ShrinkPosition& position, ShrinkVelocity& velocity) {
+    world.system(Phase::Update, each<[](ShrinkPosition &position, ShrinkVelocity &velocity) {
         movingRuns += 1;
         position.x += velocity.dx;
         position.y += velocity.dy;
-    }));
+    }>());
 
-    world.system(Phase::Update, each([&](ShrinkPosition& position, ShrinkVelocity& velocity, ShrinkBoost& boost) {
+    world.system(Phase::Update, each<[](ShrinkPosition &position, ShrinkVelocity &velocity, ShrinkBoost &boost) {
         boostedRuns += 1;
         position.x += boost.value;
         position.y += velocity.dy;
-    }));
+    }>());
 
     const Entity base = world.createEntity();
     const Entity doomedBoost = world.createEntity();
@@ -153,12 +153,12 @@ Test(world_shrink, shrink_keeps_component_migrations_and_future_matching_queries
     world.registerComponent<ShrinkShield>();
     world.registerComponent<ShrinkTag>();
 
-    int boostedRuns = 0;
+    static int boostedRuns = 0;
 
-    world.system(Phase::Update, each([&](ShrinkPosition& position, ShrinkVelocity& velocity, ShrinkBoost& boost) {
+    world.system(Phase::Update, each<[](ShrinkPosition &position, ShrinkVelocity &velocity, ShrinkBoost &boost) {
         boostedRuns += 1;
         position.x += velocity.dx + boost.value;
-    }));
+    }>());
 
     const Entity base = world.createEntity();
     const Entity doomedBoost = world.createEntity();

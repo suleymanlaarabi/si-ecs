@@ -10,11 +10,6 @@ namespace {
         int y = 0;
     };
 
-    struct Velocity {
-        int x = 0;
-        int y = 0;
-    };
-
     struct Health {
         int value = 0;
     };
@@ -28,17 +23,17 @@ Test(commands, commands_param_is_resolved_and_deferred_add_is_visible_in_later_p
     const Entity entity = world.createEntity();
     world.set(entity, Position{.x = 1});
 
-    int updateRuns = 0;
-    int postUpdateRuns = 0;
+    static int updateRuns = 0;
+    static int postUpdateRuns = 0;
 
-    world.system(Phase::Update, each([&updateRuns](Entity current, Position&, Commands& commands) {
+    world.system(Phase::Update, each<[](Entity current, Position &, Commands &commands) {
         updateRuns += 1;
         commands.add<Health>(current);
-    }));
+    }>());
 
-    world.system(Phase::PostUpdate, each([&postUpdateRuns](Health&) {
+    world.system(Phase::PostUpdate, each<[](Health &) {
         postUpdateRuns += 1;
-    }));
+    }>());
 
     world.progress();
 
@@ -54,12 +49,12 @@ Test(commands, deferred_remove_is_applied_once_and_cleared_after_flush) {
     const Entity entity = world.createEntity();
     world.set(entity, Position{.x = 10});
 
-    int updateRuns = 0;
+    static int updateRuns = 0;
 
-    world.system(Phase::Update, each([&updateRuns](Entity current, Position&, Commands& commands) {
+    world.system(Phase::Update, each<[](Entity current, Position &, Commands &commands) {
         updateRuns += 1;
         commands.remove<Position>(current);
-    }));
+    }>());
 
     world.progress();
 
@@ -80,11 +75,11 @@ Test(commands, deferred_set_copies_value_before_flush) {
     const Entity entity = world.createEntity();
     world.set(entity, Position{.x = 0});
 
-    world.system(Phase::Update, each([](Entity current, Position&, Commands& commands) {
+    world.system(Phase::Update, each<[](Entity current, Position &, Commands &commands) {
         Health health{.value = 42};
         commands.set<Health>(current, health);
         health.value = 7;
-    }));
+    }>());
 
     world.progress();
 

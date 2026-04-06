@@ -33,6 +33,7 @@ class Commands {
 
 public:
     explicit Commands(World&);
+    ~Commands();
 
     static Commands& fromWorldTable(World&, const Table&);
 

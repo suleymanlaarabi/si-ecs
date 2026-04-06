@@ -111,4 +111,8 @@ Query query() {
 struct QueryCache {
     Query query;
     EcsVec<TableId> tables;
+
+    ~QueryCache() {
+        this->tables.free();
+    }
 };
