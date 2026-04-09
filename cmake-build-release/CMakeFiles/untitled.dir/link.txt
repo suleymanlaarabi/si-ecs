@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -march=native -fopt-info-vec-optimized -Wl,--dependency-file=CMakeFiles/untitled.dir/link.d CMakeFiles/untitled.dir/main.cpp.o -o untitled  libecs.a -ltcc
