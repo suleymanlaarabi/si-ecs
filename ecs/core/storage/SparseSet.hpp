@@ -3,7 +3,7 @@
 #include <cstring>
 
 class SparseIndices {
-    uint16_t* indices = nullptr;
+    uint16_t *indices = nullptr;
     size_t capacity = 0;
     size_t count = 0;
 
@@ -12,10 +12,11 @@ public:
         this->grow(4);
     }
 
-    SparseIndices(const SparseIndices&) = delete;
-    SparseIndices& operator=(const SparseIndices&) = delete;
+    SparseIndices(const SparseIndices &) = delete;
 
-    SparseIndices(SparseIndices&& other) noexcept {
+    SparseIndices &operator=(const SparseIndices &) = delete;
+
+    SparseIndices(SparseIndices &&other) noexcept {
         this->indices = other.indices;
         this->capacity = other.capacity;
         this->count = other.count;
@@ -24,7 +25,7 @@ public:
         other.count = 0;
     }
 
-    SparseIndices& operator=(SparseIndices&& other) noexcept {
+    SparseIndices &operator=(SparseIndices &&other) noexcept {
         if (this == &other) {
             return *this;
         }
@@ -44,6 +45,10 @@ public:
     }
 
     [[nodiscard]] uint16_t at(const uint16_t id) const {
+        return this->indices[id];
+    }
+
+    [[nodiscard]] uint16_t atOrInvalid(const uint16_t id) const {
         if (id >= this->count) {
             return UINT16_MAX;
         }
@@ -82,7 +87,7 @@ public:
 
 private:
     void grow(const size_t newCapacity) {
-        auto* grown = new uint16_t[newCapacity];
+        auto *grown = new uint16_t[newCapacity];
         memset(grown, 0xFF, static_cast<size_t>(newCapacity) * sizeof(uint16_t));
         if (this->count != 0) {
             memcpy(grown, this->indices, static_cast<size_t>(this->count) * sizeof(uint16_t));

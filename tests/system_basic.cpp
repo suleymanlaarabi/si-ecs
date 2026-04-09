@@ -32,21 +32,31 @@ namespace {
     struct DeltaTime {
         int value = 1;
 
-        static const DeltaTime &fromWorldTable(World &world, const Table &) {
+        static const DeltaTime& fromTable(World& world, const Table&) {
             return world.getSingleton<DeltaTime>();
+        }
+    };
+
+    struct WorldScale {
+        int value = 1;
+        static inline int fromWorldCalls = 0;
+
+        static WorldScale fromWorld(World& world) {
+            fromWorldCalls += 1;
+            return world.getSingleton<WorldScale>();
         }
     };
 
     struct RowEntity {
         Entity value;
 
-        static RowEntity fromWorldRow(World &, const Table &table, const EntityRow row) {
+        static RowEntity fromRow(World&, const Table& table, const EntityRow row) {
             return RowEntity{.value = table.getEntities()[row]};
         }
     };
 
-    template<auto func>
-    SystemDesc describeSystem(const Query &query) {
+    template <auto func>
+    SystemDesc describeSystem(const Query& query) {
         return {
             .query = query,
             .callback = +[](const EcsVec<TableId>& tables, World& world) {
@@ -71,7 +81,7 @@ namespace {
         world.set(stationary, Position{.x = 10, .y = 20});
         world.set(unrelated, Mass{.value = 5});
 
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel) {
             pos.x += vel.x;
             pos.y += vel.y;
         }>());
@@ -109,7 +119,7 @@ namespace {
 
         world.set(positionOnly, Position{.x = 99, .y = 100});
 
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel) {
             pos.x += vel.x;
             pos.y += vel.y;
         }>());
@@ -132,7 +142,7 @@ namespace {
         world.registerComponent<Velocity>();
 
         static int runs = 0;
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel) {
             runs += 1;
             pos.x += vel.x;
         }>());
@@ -182,10 +192,10 @@ namespace {
 
         static int matchedEntities = 0;
 
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel) {
             matchedEntities += 1;
             pos.x += vel.x;
-        }, Without<Sleeping> >());
+        }, Without<Sleeping>>());
 
         world.progress();
 
@@ -200,13 +210,13 @@ namespace {
         World world;
         static std::vector<int> calls;
 
-        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId> &, World &) {
+        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId>&, World&) {
             calls.push_back(1);
         }>(query<>()));
-        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId> &, World &) {
+        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId>&, World&) {
             calls.push_back(2);
         }>(query<>()));
-        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId> &, World &) {
+        world.system(Phase::Update, describeSystem<[](const EcsVec<TableId>&, World&) {
             calls.push_back(3);
         }>(query<>()));
 
@@ -248,7 +258,7 @@ namespace {
         static int updatedCount = 0;
         static int updatedSum = 0;
 
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel) {
             pos.x += vel.x;
             pos.y += vel.y;
             updatedCount += 1;
@@ -291,7 +301,7 @@ namespace {
 
         static std::vector<Entity> visited;
 
-        world.system(Phase::Update, each<[](Entity entity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Entity entity, Position& pos, Velocity& vel) {
             visited.push_back(entity);
             pos.x += vel.x;
         }>());
@@ -328,7 +338,7 @@ namespace {
 
         static std::vector<Entity> visited;
 
-        world.system(Phase::Update, each<[](Entity entity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Entity entity, Position& pos, Velocity& vel) {
             visited.push_back(entity);
             pos.x += vel.x;
         }>());
@@ -359,7 +369,7 @@ namespace {
 
         world.destroyEntity(second);
 
-        world.system(Phase::Update, each<[](const Entity entity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](const Entity entity, Position& pos, Velocity& vel) {
             pos.y = static_cast<int>(entity.index);
             pos.x += vel.x;
         }>());
@@ -401,7 +411,7 @@ namespace {
 
         static int observedUpdated = 0;
 
-        world.system(Phase::Update, each<[](Entity entity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Entity entity, Position& pos, Velocity& vel) {
             visited += 1;
             indexSum += entity.index;
             pos.x += vel.x;
@@ -433,10 +443,10 @@ namespace {
 
         static std::vector<Entity> visited;
 
-        world.system(Phase::Update, each<[](Entity entity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](Entity entity, Position& pos, Velocity& vel) {
             visited.push_back(entity);
             pos.x += vel.x;
-        }, Without<Sleeping> >());
+        }, Without<Sleeping>>());
 
         world.progress();
 
@@ -457,7 +467,7 @@ namespace {
         world.set(entity, Position{.x = 1, .y = 2});
         world.set(entity, Velocity{.x = 4, .y = 5});
 
-        world.system(Phase::Update, each<[](Position &pos, Velocity &vel, const DeltaTime &dt) {
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel, const DeltaTime& dt) {
             pos.x += vel.x * dt.value;
             pos.y += vel.y * dt.value;
         }>());
@@ -466,6 +476,106 @@ namespace {
 
         cr_assert_eq(world.get<Position>(entity).x, 13);
         cr_assert_eq(world.get<Position>(entity).y, 17);
+    }
+
+    Test(system, each_supports_from_world_params) {
+        World world;
+        world.registerComponent<Position>();
+        world.registerComponent<Velocity>();
+        world.initSingleton<WorldScale>();
+        world.getSingleton<WorldScale>().value = 4;
+        WorldScale::fromWorldCalls = 0;
+
+        const Entity first = world.createEntity();
+        const Entity second = world.createEntity();
+        const Entity unmatched = world.createEntity();
+
+        world.set(first, Position{.x = 1, .y = 2});
+        world.set(first, Velocity{.x = 3, .y = 5});
+        world.set(second, Position{.x = 10, .y = 20});
+        world.set(second, Velocity{.x = -1, .y = 2});
+        world.set(unmatched, Position{.x = 7, .y = 9});
+
+        world.system(Phase::Update, each<[](Position& pos, Velocity& vel, WorldScale scale) {
+            pos.x += vel.x * scale.value;
+            pos.y += vel.y * scale.value;
+        }>());
+
+        world.progress();
+
+        cr_assert_eq(WorldScale::fromWorldCalls, 1);
+        cr_assert_eq(world.get<Position>(first).x, 13);
+        cr_assert_eq(world.get<Position>(first).y, 22);
+        cr_assert_eq(world.get<Position>(second).x, 6);
+        cr_assert_eq(world.get<Position>(second).y, 28);
+        cr_assert_eq(world.get<Position>(unmatched).x, 7);
+        cr_assert_eq(world.get<Position>(unmatched).y, 9);
+    }
+
+    Test(system, each_supports_from_world_params_with_without_filters) {
+        World world;
+        world.registerComponent<Position>();
+        world.registerComponent<Sleeping>();
+        world.initSingleton<WorldScale>();
+        world.getSingleton<WorldScale>().value = 6;
+
+        const Entity awake = world.createEntity();
+        const Entity sleeping = world.createEntity();
+
+        world.set(awake, Position{.x = 1});
+        world.set(sleeping, Position{.x = 2});
+        world.add<Sleeping>(sleeping);
+
+        world.system(Phase::Update, each<[](Position& pos, const WorldScale scale) {
+            pos.y = scale.value;
+        }, Without<Sleeping>>());
+
+        world.progress();
+
+        cr_assert_eq(world.get<Position>(awake).y, 6);
+        cr_assert_eq(world.get<Position>(sleeping).y, 0);
+    }
+
+    Test(system, task_supports_from_world_params) {
+        World world;
+        world.initSingleton<WorldScale>();
+        world.getSingleton<WorldScale>().value = 9;
+        WorldScale::fromWorldCalls = 0;
+
+        static int observed = 0;
+        observed = 0;
+
+        world.system(Phase::Update, task<[](WorldScale scale) {
+            observed = scale.value;
+        }>());
+
+        world.progress();
+
+        cr_assert_eq(observed, 9);
+        cr_assert_eq(WorldScale::fromWorldCalls, 1);
+    }
+
+    Test(system, task_supports_world_and_from_world_params) {
+        World world;
+        world.initSingleton<WorldScale>();
+        world.getSingleton<WorldScale>().value = 12;
+        WorldScale::fromWorldCalls = 0;
+
+        static World* observedWorld = nullptr;
+        static int observed = 0;
+        observedWorld = nullptr;
+        observed = 0;
+
+        world.system(Phase::Update, task<[](World& ctx, const WorldScale scale) {
+            observedWorld = &ctx;
+            observed = scale.value;
+        }>());
+
+        world.progress();
+
+        cr_assert_eq(observedWorld, &world);
+        cr_assert_eq(observed, 12);
+        cr_assert_eq(WorldScale::fromWorldCalls, 1);
     }
 
     Test(system, each_supports_entity_commands_and_without_combination) {
@@ -481,9 +591,9 @@ namespace {
         world.set(sleeping, Position{.x = 2});
         world.add<Sleeping>(sleeping);
 
-        world.system(Phase::Update, each<[](Entity entity, Position &, Commands &commands) {
+        world.system(Phase::Update, each<[](Entity entity, Position&, Commands& commands) {
             commands.add<Health>(entity);
-        }, Without<Sleeping> >());
+        }, Without<Sleeping>>());
 
         world.progress();
 
@@ -502,7 +612,7 @@ namespace {
 
         static int sum = 0;
 
-        world.system(Phase::Update, each<[](const Position &pos, const Velocity &vel) {
+        world.system(Phase::Update, each<[](const Position& pos, const Velocity& vel) {
             sum += pos.x + pos.y + vel.x + vel.y;
         }>());
 
@@ -526,7 +636,7 @@ namespace {
 
         static std::vector<Entity> visited;
 
-        world.system(Phase::Update, each<[](RowEntity rowEntity, Position &pos, Velocity &vel) {
+        world.system(Phase::Update, each<[](RowEntity rowEntity, Position& pos, Velocity& vel) {
             visited.push_back(rowEntity.value);
             pos.x += vel.x;
         }>());
@@ -557,10 +667,10 @@ namespace {
 
         static std::vector<Entity> visited;
 
-        world.system(Phase::Update, each<[](RowEntity rowEntity, Position &pos) {
+        world.system(Phase::Update, each<[](RowEntity rowEntity, Position& pos) {
             visited.push_back(rowEntity.value);
             pos.y = static_cast<int>(rowEntity.value.index);
-        }, Without<Sleeping> >());
+        }, Without<Sleeping>>());
 
         world.progress();
 

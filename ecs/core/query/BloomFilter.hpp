@@ -15,3 +15,6 @@ inline BloomFilter bloomFromEntityType(const EntityType& e) {
     return filter;
 }
 
+inline bool bloomIsSet(const BloomFilter bloom, const ComponentId cid) {
+    return bloom & (1ull << (cid % 64));
+}

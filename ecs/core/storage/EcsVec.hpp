@@ -4,6 +4,7 @@
 
 template<typename T, typename Size = uint32_t>
 struct EcsVec {
+    static constexpr bool IsSizeZero = ecs_sizeof<T>() == 0;
     T *data = nullptr;
     Size size = 0;
     Size capacity = 0;
@@ -11,18 +12,24 @@ struct EcsVec {
     EcsVec() = default;
 
     EcsVec(const EcsVec &other) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         if (other.size == 0) {
             return;
         }
 
-        this->data = static_cast<T *>(std::malloc(other.size * sizeof(T)));
-        std::memcpy(this->data, other.data, other.size * sizeof(T));
+        this->data = static_cast<T *>(std::malloc(other.size * ecs_sizeof<T>()));
+        std::memcpy(this->data, other.data, other.size * ecs_sizeof<T>());
         this->size = other.size;
         this->capacity = other.size;
     }
 
     EcsVec(EcsVec &&other) noexcept
         : data(other.data), size(other.size), capacity(other.capacity) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         other.data = nullptr;
         other.size = 0;
         other.capacity = 0;
@@ -61,10 +68,16 @@ struct EcsVec {
     }
 
     explicit EcsVec(T value) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         this->push_back(value);
     }
 
     EcsVec(Size capacity, T value) : capacity(capacity) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         this->data = static_cast<T *>(std::malloc(capacity * sizeof(T)));
         this->capacity = capacity;
         for (Size i = 0; i < capacity; ++i) {
@@ -73,6 +86,9 @@ struct EcsVec {
     }
 
     void push_back(const T &value) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         if (this->size >= this->capacity) {
             this->capacity = this->capacity == 0 ? 1 : this->capacity * 2;
             this->data = static_cast<T *>(std::realloc(this->data, this->capacity * sizeof(T)));
@@ -83,6 +99,9 @@ struct EcsVec {
 
 
     void erase(Size index) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         uint32_t last = this->size - 1;
         if (index != last)
             std::memcpy(this->data + index, this->data + last, sizeof(T));
@@ -90,6 +109,9 @@ struct EcsVec {
     }
 
     void remove(const T &value) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         for (uint32_t i = 0; i < this->size; i++) {
             if (this->data[i] == value) {
                 this->erase(i);
@@ -99,6 +121,9 @@ struct EcsVec {
     }
 
     void replace(const T &value, const T &newValue) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         for (uint32_t i = 0; i < this->size; i++) {
             if (this->data[i] == value) {
                 this->data[i] = newValue;
@@ -108,6 +133,9 @@ struct EcsVec {
     }
 
     bool has(const T &value) {
+        if constexpr (IsSizeZero) {
+            return false;
+        }
         for (uint32_t i = 0; i < this->size; i++) {
             if (this->data[i] == value) {
                 return true;
@@ -117,6 +145,9 @@ struct EcsVec {
     }
 
     void resize(Size new_size) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         if (new_size > this->capacity) {
             this->capacity = new_size;
             this->data = static_cast<T *>(std::realloc(this->data, this->capacity * sizeof(T)));
@@ -125,6 +156,9 @@ struct EcsVec {
     }
 
     void resize(Size new_size, const T &value) {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         if (new_size > this->capacity) {
             this->capacity = new_size;
             this->data = static_cast<T *>(std::realloc(this->data, this->capacity * sizeof(T)));
@@ -134,12 +168,18 @@ struct EcsVec {
     }
 
     void pop_back() {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         if (this->size > 0) {
             this->size -= 1;
         }
     }
 
     void free() {
+        if constexpr (IsSizeZero) {
+            return;
+        }
         std::free(this->data);
         this->data = nullptr;
         this->size = 0;
@@ -147,18 +187,30 @@ struct EcsVec {
     }
 
     T *begin() {
+        if constexpr (IsSizeZero) {
+            return nullptr;
+        }
         return this->data;
     }
 
     T *end() {
+        if constexpr (IsSizeZero) {
+            return nullptr;
+        }
         return this->data + this->size;
     }
 
     const T *begin() const {
+        if constexpr (IsSizeZero) {
+            return nullptr;
+        }
         return this->data;
     }
 
     const T *end() const {
+        if constexpr (IsSizeZero) {
+            return nullptr;
+        }
         return this->data + this->size;
     }
 

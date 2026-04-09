@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.31)
 project(untitled LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -27,76 +27,30 @@ function(ecs_enable_sanitizers target_name)
     )
 endfunction()
 
-add_library(ecs STATIC
-        ecs/World.hpp
-        ecs/Query.hpp
-        ecs/System.hpp
-        ecs/Commands.hpp
-        ecs/Addons.hpp
-        engine/Engine.hpp
-        ecs/EntityRef.hpp
-        ecs/EntityRef.cpp
-        ecs/core/base/ComponentType.hpp
-        ecs/core/base/EcsAssert.hpp
-        ecs/core/base/EcsType.hpp
-        ecs/core/base/TypeCounter.hpp
-        ecs/core/base/typing.hpp
-        ecs/core/memory/Allocator.hpp
-        ecs/core/memory/Allocator.cpp
-        ecs/core/storage/EcsVec.hpp
-        ecs/core/storage/SparseSet.hpp
-        ecs/core/storage/Table.hpp
-        ecs/core/storage/Table.cpp
-        ecs/core/storage/TableMap.hpp
-        ecs/core/storage/TableRegistry.hpp
-        ecs/core/storage/TableRegistry.cpp
-        ecs/core/storage/TypedTable.hpp
-        ecs/core/entity/EntityRegistry.hpp
-        ecs/core/entity/EntityRegistry.cpp
-        ecs/core/entity/EntityManager.hpp
-        ecs/core/entity/EntityManager.cpp
-        ecs/core/entity/EntityType.cpp
-        ecs/core/component/ComponentRegistry.hpp
-        ecs/core/component/ComponentRegistry.cpp
-        ecs/core/query/BloomFilter.hpp
-        ecs/core/query/Iter.hpp
-        ecs/core/query/Iter.cpp
-        ecs/core/query/Query.cpp
-        ecs/core/query/QueryRegistry.hpp
-        ecs/core/query/QueryRegistry.cpp
-        ecs/core/query/QueryTables.hpp
-        ecs/core/system/SystemDesc.hpp
-        ecs/core/system/SystemRegistry.hpp
-        ecs/core/system/SystemRegistry.cpp
-        ecs/core/system/WorldAccess.hpp
-        ecs/core/event/EventRegistry.hpp
-        ecs/core/event/EntityEventRegistry.hpp
-        ecs/core/relation/Relations.hpp
-        ecs/core/plugin/PluginRegistry.hpp
-        ecs/core/plugin/Reflect.hpp
-        ecs/core/plugin/SingletonRegistry.hpp
-        ecs/world/World.cpp
-        ecs/command/Commands.cpp
-        ecs/addon/Addons.cpp
+file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS
+        "ecs/*.cpp"
+        "ecs/*.hpp"
+        "engine/*.cpp"
+        "engine/*.hpp"
 )
 
+add_library(ecs STATIC ${ECS_SOURCES})
+
+set(ECS_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
+foreach (FILE IN LISTS ECS_SOURCES)
+    get_filename_component(DIR ${FILE} DIRECTORY)
+    list(APPEND ECS_INCLUDE_DIRS ${DIR})
+endforeach ()
+list(REMOVE_DUPLICATES ECS_INCLUDE_DIRS)
+
 target_include_directories(ecs PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/base
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/memory
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/storage
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/entity
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/component
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/query
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/system
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/event
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/relation
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/core/plugin
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/world
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/command
-        ${CMAKE_CURRENT_SOURCE_DIR}/ecs/addon
+        ${ECS_INCLUDE_DIRS}
+        $ENV{HOME}/.local/include
 )
+
+target_link_directories(ecs PUBLIC $ENV{HOME}/.local/lib)
+target_link_libraries(ecs PUBLIC tcc)
+
 target_precompile_headers(ecs PRIVATE ecs/pch.hpp)
 set_target_properties(ecs PROPERTIES
         CXX_STANDARD 26
@@ -110,34 +64,17 @@ target_link_libraries(untitled PRIVATE ecs)
 target_precompile_headers(untitled PRIVATE ecs/pch.hpp)
 ecs_enable_sanitizers(untitled)
 
-add_executable(ecs_bench_query
-        benchmarks/query_bench.cpp
-        benchmarks/BenchCommon.hpp)
-target_link_libraries(ecs_bench_query PRIVATE ecs)
-target_precompile_headers(ecs_bench_query PRIVATE ecs/pch.hpp)
-ecs_enable_sanitizers(ecs_bench_query)
-
-add_executable(ecs_bench_entity_component
-        benchmarks/entity_component_bench.cpp
-        benchmarks/BenchCommon.hpp)
-target_link_libraries(ecs_bench_entity_component PRIVATE ecs)
-target_precompile_headers(ecs_bench_entity_component PRIVATE ecs/pch.hpp)
-ecs_enable_sanitizers(ecs_bench_entity_component)
-
 include(CTest)
 if (BUILD_TESTING)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(CRITERION REQUIRED IMPORTED_TARGET criterion)
 
-    file(GLOB TEST_SOURCES CONFIGURE_DEPENDS
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp
+    file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS
+            "tests/*.cpp"
+            "tests/*.hpp"
     )
 
-    add_executable(ecs_tests ${TEST_SOURCES}
-            tests/query_basic.cpp
-            tests/system_basic.cpp
-            tests/commands_basic.cpp
-            tests/system_condition.cpp)
+    add_executable(ecs_tests ${TEST_SOURCES})
     target_link_libraries(ecs_tests PRIVATE ecs PkgConfig::CRITERION)
     target_precompile_headers(ecs_tests PRIVATE ecs/pch.hpp)
     ecs_enable_sanitizers(ecs_tests)

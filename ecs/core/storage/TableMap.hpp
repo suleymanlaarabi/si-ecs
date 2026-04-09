@@ -14,8 +14,8 @@ static __attribute__((always_inline)) uint64_t inline mix64(uint64_t x) noexcept
     return x;
 }
 
-static __attribute__((always_inline)) uint64_t inline hashEntityType(const EntityType& e) noexcept {
-    const auto* data = reinterpret_cast<const uint8_t*>(e.cids);
+static __attribute__((always_inline)) uint64_t inline hashEntityType(const EntityType &e) noexcept {
+    const auto *data = reinterpret_cast<const uint8_t *>(e.cids);
     const size_t len = static_cast<size_t>(e.count) * sizeof(ComponentId);
 
     uint64_t h = mix64(0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(e.count));
@@ -46,7 +46,7 @@ struct Bucket {
 
 struct TableMap {
     std::vector<Table> tables;
-    Bucket* buckets = nullptr;
+    Bucket *buckets = nullptr;
     uint32_t size = 0;
     uint32_t count = 0;
 
@@ -66,25 +66,24 @@ struct TableMap {
             }
 
             buckets[newIdx] = moved;
-            tables[moved.tableId].bucketIndex = newIdx;
             idx = (idx + 1) & mask;
         }
     }
 
     inline void growBuckets() {
         const uint32_t newSize = size * 2;
-        auto* newBuckets = new Bucket[newSize];
+        auto *newBuckets = new Bucket[newSize];
         const auto newMask = newSize - 1u;
 
         for (uint32_t i = 0; i < size; i++) {
-            const Bucket& oldBucket = buckets[i];
+            const Bucket &oldBucket = buckets[i];
             if (oldBucket.tableId == InvalidTableId) {
                 continue;
             }
             uint32_t newIdx = oldBucket.hash & newMask;
 
             while (true) {
-                const Bucket& b = newBuckets[newIdx];
+                const Bucket &b = newBuckets[newIdx];
 
                 if (b.tableId == InvalidTableId) {
                     break;
@@ -94,7 +93,6 @@ struct TableMap {
             }
 
             newBuckets[newIdx] = oldBucket;
-            tables[oldBucket.tableId].bucketIndex = newIdx;
         }
 
         delete[] buckets;
@@ -102,12 +100,12 @@ struct TableMap {
         size = newSize;
     }
 
-    [[nodiscard]] inline uint32_t findBucketIndex(const EntityType& e, const uint64_t hash) const {
+    [[nodiscard]] inline uint32_t findBucketIndex(const EntityType &e, const uint64_t hash) const {
         const uint32_t mask = size - 1u;
         uint32_t idx = hash & mask;
 
         while (true) {
-            const Bucket& b = buckets[idx];
+            const Bucket &b = buckets[idx];
             if (b.tableId == InvalidTableId || (b.hash == hash && e == tables[b.tableId].getType())) {
                 return idx;
             }
@@ -115,15 +113,14 @@ struct TableMap {
         }
     }
 
-    [[nodiscard]] inline std::pair<TableId, Table&> createAt(const uint32_t idx, const uint64_t hash,
-                                                             EntityType&& ownedType,
-                                                             ComponentRegistry& componentRegistry,
-                                                             bool& isCreated) {
-        Bucket& bucket = buckets[idx];
+    [[nodiscard]] inline std::pair<TableId, Table &> createAt(const uint32_t idx, const uint64_t hash,
+                                                              EntityType &&ownedType,
+                                                              ComponentRegistry &componentRegistry,
+                                                              bool &isCreated) {
+        Bucket &bucket = buckets[idx];
         ecs_assert(tables.size() <= UINT16_MAX, "table id limit reached");
         const auto tid = static_cast<TableId>(tables.size());
-        Table& table = tables.emplace_back(std::move(ownedType), componentRegistry, tid);
-        table.bucketIndex = idx;
+        Table &table = tables.emplace_back(std::move(ownedType), componentRegistry, tid);
         bucket.tableId = tid;
         bucket.hash = hash;
         count += 1;
@@ -138,47 +135,30 @@ public:
         this->buckets = new Bucket[16];
     }
 
-    TableMap(const TableMap&) = delete;
-    TableMap& operator=(const TableMap&) = delete;
+    TableMap(const TableMap &) = delete;
+
+    TableMap &operator=(const TableMap &) = delete;
 
     ~TableMap() {
         delete[] this->buckets;
     }
 
-    // returns the TableId which becomes the removed TableId
-    inline TableId remove(const TableId tid) {
-        const TableId lastTid = tables.size() - 1;
-        const TableId movedTid = (tid != lastTid) ? lastTid : InvalidTableId;
-        const uint32_t erasedBucket = tables[tid].bucketIndex;
 
-        if (tid != lastTid) {
-            eraseBucketAt(erasedBucket);
-
-            tables[tid] = std::move(tables[lastTid]);
-            buckets[tables[tid].bucketIndex].tableId = tid;
-        } else {
-            eraseBucketAt(erasedBucket);
-        }
-
-        tables.pop_back();
-        return movedTid;
-    }
-
-    [[nodiscard]] inline bool contains(const EntityType& e) const {
+    [[nodiscard]] inline bool contains(const EntityType &e) const {
         const uint64_t hash = hashEntityType(e);
         return buckets[findBucketIndex(e, hash)].tableId != InvalidTableId;
     }
 
-    [[nodiscard]] inline std::pair<TableId, Table&> findOrCreate(EntityType&& e,
-                                                                 ComponentRegistry& componentRegistry,
-                                                                 bool& isCreated) {
+    [[nodiscard]] inline std::pair<TableId, Table &> findOrCreate(EntityType &&e,
+                                                                  ComponentRegistry &componentRegistry,
+                                                                  bool &isCreated) {
         if ((count + 1) * 2 > size) {
             growBuckets();
         }
 
         const uint64_t hash = hashEntityType(e);
         const uint32_t idx = findBucketIndex(e, hash);
-        if (const Bucket& bucket = buckets[idx]; bucket.tableId != InvalidTableId) {
+        if (const Bucket &bucket = buckets[idx]; bucket.tableId != InvalidTableId) {
             e.release();
             e = {};
             return {bucket.tableId, tables[bucket.tableId]};

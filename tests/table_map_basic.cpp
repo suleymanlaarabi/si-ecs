@@ -33,17 +33,17 @@ struct TableMapTag {};
 
 static EntityType makeType(const std::initializer_list<ComponentId> ids) {
     EntityType type{};
-    for (const ComponentId id : ids) {
+    for (const ComponentId id: ids) {
         type.add(id);
     }
     return type;
 }
 
-static std::vector<EntityType> makeCandidateTypes(const std::vector<ComponentId>& ids) {
+static std::vector<EntityType> makeCandidateTypes(const std::vector<ComponentId> &ids) {
     std::vector<EntityType> candidates;
 
     candidates.push_back(makeType({}));
-    for (const ComponentId id : ids) {
+    for (const ComponentId id: ids) {
         candidates.push_back(makeType({id}));
     }
 
@@ -69,7 +69,7 @@ Test(table_map, find_or_create_reuses_existing_table_for_same_type) {
     auto [fst, firstTable] = map.findOrCreate(EntityType{}, registry, firstCreated);
 
     bool secondCreated = false;
-    std::pair<TableId, Table&> second = map.findOrCreate(EntityType{}, registry, secondCreated);
+    std::pair<TableId, Table &> second = map.findOrCreate(EntityType{}, registry, secondCreated);
 
     cr_assert_eq(fst, 0);
     cr_assert_eq(second.first, fst);
@@ -96,14 +96,13 @@ Test(table_map, duplicate_type_does_not_create_duplicate_component_table_entries
     cr_assert(firstCreated);
     cr_assert_not(secondCreated);
 
-    const ComponentRecord& positionRecord = registry.getComponentRecord(positionId);
-    const ComponentRecord& velocityRecord = registry.getComponentRecord(velocityId);
+    const ComponentRecord &positionRecord = registry.getComponentRecord(positionId);
+    const ComponentRecord &velocityRecord = registry.getComponentRecord(velocityId);
 
     cr_assert_eq(positionRecord.tables.size, 1);
     cr_assert_eq(velocityRecord.tables.size, 1);
     cr_assert_eq(positionRecord.tables[0], first);
     cr_assert_eq(velocityRecord.tables[0], first);
-
 }
 
 Test(table_map, growth_preserves_existing_type_lookups) {
@@ -150,7 +149,7 @@ Test(table_map, growth_preserves_existing_type_lookups) {
     std::vector<TableId> assignedIds;
     assignedIds.reserve(insertedTypes.size());
 
-    for (const EntityType& type : insertedTypes) {
+    for (const EntityType &type: insertedTypes) {
         bool isCreated = false;
         assignedIds.push_back(map.findOrCreate(type.clone(), registry, isCreated).first);
         cr_assert(isCreated);
@@ -164,7 +163,7 @@ Test(table_map, growth_preserves_existing_type_lookups) {
         cr_assert_not(isCreated);
     }
 
-    for (EntityType& type : insertedTypes) {
+    for (EntityType &type: insertedTypes) {
         type.release();
     }
 }
@@ -205,101 +204,6 @@ Test(table_map, find_or_create_must_not_reuse_table_when_only_hash_matches) {
     velocityType.release();
 }
 
-Test(table_map, remove_last_table_erases_type_from_lookup) {
-    ComponentRegistry registry;
-    registry.registerComponent<TableMapPosition>();
-
-    const ComponentId positionId = ComponentRegistry::id<TableMapPosition>();
-    EntityType positionType = makeType({positionId});
-
-    TableMap map;
-    bool created = false;
-    const TableId tid = map.findOrCreate(positionType.clone(), registry, created).first;
-
-    cr_assert(created);
-    cr_assert(map.contains(positionType));
-
-    const TableId movedTid = map.remove(tid);
-
-    cr_assert_eq(movedTid, InvalidTableId);
-    cr_assert_eq(map.tables.size(), 0);
-    cr_assert_eq(map.count, 0);
-    cr_assert_not(map.contains(positionType));
-
-    positionType.release();
-}
-
-Test(table_map, remove_rehashes_cluster_and_keeps_remaining_tables_reachable) {
-    ComponentRegistry registry;
-    registry.registerComponent<TableMapPosition>();
-    registry.registerComponent<TableMapVelocity>();
-    registry.registerComponent<TableMapHealth>();
-    registry.registerComponent<TableMapMana>();
-    registry.registerComponent<TableMapArmor>();
-    registry.registerComponent<TableMapTag>();
-
-    const std::vector<ComponentId> ids = {
-        ComponentRegistry::id<TableMapPosition>(),
-        ComponentRegistry::id<TableMapVelocity>(),
-        ComponentRegistry::id<TableMapHealth>(),
-        ComponentRegistry::id<TableMapMana>(),
-        ComponentRegistry::id<TableMapArmor>(),
-        ComponentRegistry::id<TableMapTag>(),
-    };
-
-    std::vector<EntityType> candidates = makeCandidateTypes(ids);
-    EntityType* firstType = nullptr;
-    EntityType* secondType = nullptr;
-    uint32_t sharedIndex = 0;
-
-    for (size_t i = 0; i < candidates.size() && firstType == nullptr; ++i) {
-        for (size_t j = i + 1; j < candidates.size(); ++j) {
-            const uint32_t lhs = hashEntityType(candidates[i]) & 15u;
-            const uint32_t rhs = hashEntityType(candidates[j]) & 15u;
-
-            if (lhs == rhs) {
-                firstType = &candidates[i];
-                secondType = &candidates[j];
-                sharedIndex = lhs;
-                break;
-            }
-        }
-    }
-
-    cr_assert_not_null(firstType);
-    cr_assert_not_null(secondType);
-
-    TableMap map;
-    bool firstCreated = false;
-    const TableId firstTid = map.findOrCreate(firstType->clone(), registry, firstCreated).first;
-    bool secondCreated = false;
-    const TableId secondTid = map.findOrCreate(secondType->clone(), registry, secondCreated).first;
-
-    cr_assert(firstCreated);
-    cr_assert(secondCreated);
-    cr_assert_eq(firstTid, 0);
-    cr_assert_eq(secondTid, 1);
-    cr_assert_eq(map.tables[firstTid].bucketIndex, sharedIndex);
-    cr_assert_eq(map.tables[secondTid].bucketIndex, (sharedIndex + 1) & 15u);
-
-    const TableId movedTid = map.remove(firstTid);
-
-    cr_assert_eq(movedTid, secondTid);
-    cr_assert_not(map.contains(*firstType));
-    cr_assert(map.contains(*secondType));
-    cr_assert_eq(map.tables.size(), 1);
-    cr_assert_eq(map.count, 1);
-    cr_assert_eq(map.tables[0].bucketIndex, sharedIndex);
-    cr_assert_eq(map.buckets[sharedIndex].tableId, 0);
-
-    bool recreated = false;
-    cr_assert_eq(map.findOrCreate(secondType->clone(), registry, recreated).first, 0);
-    cr_assert_not(recreated);
-
-    for (EntityType& candidate : candidates) {
-        candidate.release();
-    }
-}
 
 Test(table_map, growth_updates_bucket_indices) {
     ComponentRegistry registry;
@@ -320,9 +224,9 @@ Test(table_map, growth_updates_bucket_indices) {
     };
 
     std::vector<EntityType> candidates = makeCandidateTypes(ids);
-    EntityType* targetType = nullptr;
+    EntityType *targetType = nullptr;
 
-    for (EntityType& candidate : candidates) {
+    for (EntityType &candidate: candidates) {
         if ((hashEntityType(candidate) & 15u) != (hashEntityType(candidate) & 31u)) {
             targetType = &candidate;
             break;
@@ -333,18 +237,18 @@ Test(table_map, growth_updates_bucket_indices) {
 
     TableMap map;
     bool targetCreated = false;
-    (void)map.findOrCreate(targetType->clone(), registry, targetCreated);
+    (void) map.findOrCreate(targetType->clone(), registry, targetCreated);
 
     cr_assert(targetCreated);
 
     uint32_t inserted = 1;
-    for (EntityType& candidate : candidates) {
+    for (EntityType &candidate: candidates) {
         if (&candidate == targetType) {
             continue;
         }
 
         bool isCreated = false;
-        (void)map.findOrCreate(candidate.clone(), registry, isCreated);
+        (void) map.findOrCreate(candidate.clone(), registry, isCreated);
         inserted += 1;
 
         if (inserted >= 9) {
@@ -363,14 +267,9 @@ Test(table_map, growth_updates_bucket_indices) {
         }
 
         cr_assert_neq(actualBucketIndex, UINT32_MAX);
-        cr_assert_eq(
-            map.tables[tid].bucketIndex,
-            actualBucketIndex,
-            "growBuckets() must keep Table::bucketIndex in sync with the actual bucket location"
-        );
     }
 
-    for (EntityType& candidate : candidates) {
+    for (EntityType &candidate: candidates) {
         candidate.release();
     }
 }

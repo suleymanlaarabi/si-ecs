@@ -1,6 +1,5 @@
 #include "Commands.hpp"
 
-#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -55,7 +54,7 @@ Entity Commands::spawn() const {
     return world.createEntity();
 }
 
-Commands& Commands::fromWorldTable(World& world, const Table&) {
+Commands& Commands::fromTable(World& world, const Table&) {
     return world.getSingleton<Commands>();
 }
 

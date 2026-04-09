@@ -1,8 +1,8 @@
 #include <criterion/criterion.h>
 
-#include "System.hpp"
 #include "../ecs/World.hpp"
-
+#include "../ecs/Addons.hpp"
+#include "System.hpp"
 
 Test(system_condition, basique) {
     World world;
@@ -18,7 +18,7 @@ Test(system_condition, basique) {
 
     auto sys = task<[]() {
         count += 1;
-    }>().condition<InState<MyState::A> >(world);
+    }>().condition<InState<MyState::A>>(world);
 
     world.system(Phase::Update, sys);
 

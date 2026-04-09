@@ -35,7 +35,7 @@ public:
     explicit Commands(World&);
     ~Commands();
 
-    static Commands& fromWorldTable(World&, const Table&);
+    static Commands& fromTable(World&, const Table&);
 
     [[nodiscard]] Entity spawn() const;
     void kill(Entity);

@@ -1,25 +1,46 @@
 CMAKE ?= cmake
-BUILD_DIR ?= cmake-build-bench
 BUILD_TYPE ?= Release
 SANITIZER_BUILD_DIR ?= cmake-build-asan
-BENCH_ARGS ?=
-QUERY_BENCH_ARGS ?= $(BENCH_ARGS)
-ENTITY_BENCH_ARGS ?= $(BENCH_ARGS)
+DEBUG_BUILD_DIR ?= cmake-build-debug
+RELEASE_BUILD_DIR ?= cmake-build-release
+VEC_LOG_DIR ?= build-logs
+PROBE_BIN ?= $(abspath $(VEC_LOG_DIR)/vectorization-probe)
+RELEASE_VEC_FLAGS ?= -O3 -march=native -fopt-info-vec-optimized
+PROBE_VEC_FLAGS ?= -O3 -march=native -fopt-info-vec-optimized
 
-.PHONY: bench-configure bench-query bench-entity-component bench sanitize-configure sanitize-build sanitize-test sanitizers
+.PHONY: sanitize-configure sanitize-build sanitize-test sanitizers test run release release-vec release-vec-main vectorize-probe clean-vec-logs
 
-bench-configure:
-	$(CMAKE) -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DBUILD_TESTING=OFF
+test:
+	$(CMAKE) -S . -B $(DEBUG_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+	$(CMAKE) --build $(DEBUG_BUILD_DIR)
+	ctest --test-dir $(DEBUG_BUILD_DIR) --output-on-failure
 
-bench-query: bench-configure
-	$(CMAKE) --build $(BUILD_DIR) --target ecs_bench_query
-	./$(BUILD_DIR)/ecs_bench_query $(QUERY_BENCH_ARGS)
+run:
+	$(CMAKE) -S . -B $(DEBUG_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug
+	$(CMAKE) --build $(DEBUG_BUILD_DIR) --target untitled
+	./$(DEBUG_BUILD_DIR)/untitled
 
-bench-entity-component: bench-configure
-	$(CMAKE) --build $(BUILD_DIR) --target ecs_bench_entity_component
-	./$(BUILD_DIR)/ecs_bench_entity_component $(ENTITY_BENCH_ARGS)
+release:
+	$(CMAKE) -S . -B $(RELEASE_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	$(CMAKE) --build $(RELEASE_BUILD_DIR) --target untitled
 
-bench: bench-query bench-entity-component
+release-vec:
+	mkdir -p $(VEC_LOG_DIR)
+	$(CMAKE) -S . -B $(RELEASE_BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE="$(RELEASE_VEC_FLAGS)"
+	$(CMAKE) --build $(RELEASE_BUILD_DIR) --target clean
+	$(CMAKE) --build $(RELEASE_BUILD_DIR) --target untitled
+
+release-vec-main:
+	$(MAKE) release-vec 2>&1 | grep -E 'main.cpp:|ecs/System.hpp:'
+
+vectorize-probe:
+	mkdir -p $(VEC_LOG_DIR)
+	rm -f $(PROBE_BIN)
+	g++ -std=c++23 $(PROBE_VEC_FLAGS) tools/vectorization_probe.cpp -o $(PROBE_BIN)
+	@echo "Probe binary: $(PROBE_BIN)"
+
+clean-vec-logs:
+	rm -rf $(VEC_LOG_DIR)
 
 sanitize-configure:
 	$(CMAKE) -S . -B $(SANITIZER_BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DECS_ENABLE_SANITIZERS=ON

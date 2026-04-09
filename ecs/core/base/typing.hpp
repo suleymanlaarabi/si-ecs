@@ -55,3 +55,24 @@ struct tuple_tail<std::tuple<Head, Tail...>> {
 
 template <typename Tuple>
 using tuple_index_sequence = std::make_index_sequence<std::tuple_size_v<Tuple>>;
+
+template <typename T, template <typename> typename Pred>
+using keep_if_concept_t = std::conditional_t<
+    Pred<T>::value,
+    std::tuple<T>,
+    std::tuple<>
+>;
+
+template <typename... Tuples>
+using tuple_cat_t = decltype(std::tuple_cat(std::declval<Tuples>()...));
+
+template <typename Tuple, template <typename> typename Pred>
+struct filter_tuple;
+
+template <template <typename> typename Pred, typename... Ts>
+struct filter_tuple<std::tuple<Ts...>, Pred> {
+    using type = tuple_cat_t<keep_if_concept_t<Ts, Pred>...>;
+};
+
+template <typename Tuple, template <typename> typename Pred>
+using filter_tuple_t = typename filter_tuple<Tuple, Pred>::type;
