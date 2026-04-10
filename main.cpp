@@ -67,14 +67,10 @@ int main() {
         pos.y += vel.y * time.delta;
     }, Without<NoIntegrate>>();
 
-    world.system(Phase::Update, each<[](Position &pos, const Velocity &vel){
+    world.system(Phase::Update, each<[](Position& pos, const Velocity& vel) {
         pos.x += vel.x;
         pos.y += vel.y;
-    }, Without<NoIntegrate>>())
-
-
-
-
+    }, Without<NoIntegrate>>());
 
 
     world.progress();

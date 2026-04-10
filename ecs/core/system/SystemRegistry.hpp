@@ -21,7 +21,7 @@ class World;
 
 struct SystemRecord {
     QueryId qid;
-    std::function<void(const EcsVec<TableId>& tables, World&)> callback;
+    void(*callback)(const EcsVec<TableId>& tables, World&);
     std::vector<SystemCondition> conditions;
 };
 

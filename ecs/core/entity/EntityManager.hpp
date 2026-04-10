@@ -1,21 +1,25 @@
 #pragma once
 #include <utility>
-#include "Allocator.hpp"
 #include "ComponentRegistry.hpp"
 #include "EcsType.hpp"
 #include "EntityRegistry.hpp"
 #include "JitCompiler.hpp"
 #include "TableRegistry.hpp"
 
-using MigrateEntityFn = void(*)(Entity entity, TableId tid, ComponentId cid);
+struct ResolvedTableEdge {
+    Table* from;
+    Table* to;
+    TableEdge* edge;
+};
 
 class EntityManager : public EntityRegistry, public ComponentRegistry, public TableRegistry {
-    TempAllocator tmpAllocator;
-    JitCompiler compiler;
-
     void finalizeRowMigration(Table &from, EntityRecord &record, EntityRow newRow);
+    [[nodiscard]] ResolvedTableEdge resolveAddEdge(TableId fromTid, ComponentId cid);
+    [[nodiscard]] ResolvedTableEdge resolveRemoveEdge(TableId fromTid, ComponentId cid);
 
-    void migrateEntityRow(Table &from, Table &to, EntityRecord &record, Entity entity);
+    [[nodiscard]] JitMigrationFn compileMigration(const Table& from, const Table& to);
+
+    void migrateEntityRow(Table &from, Table &to, EntityRecord &record, Entity entity, JitMigrationFn migration);
 
 public:
     std::pair<Table &, EntityRow> getTable(Entity entity);

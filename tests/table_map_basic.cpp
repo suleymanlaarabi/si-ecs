@@ -273,3 +273,40 @@ Test(table_map, growth_updates_bucket_indices) {
         candidate.release();
     }
 }
+
+Test(table_map, growth_preserves_table_ids_after_vector_reallocation) {
+    ComponentRegistry registry;
+    registry.registerComponent<TableMapPosition>();
+    registry.registerComponent<TableMapVelocity>();
+    registry.registerComponent<TableMapHealth>();
+    registry.registerComponent<TableMapMana>();
+    registry.registerComponent<TableMapArmor>();
+    registry.registerComponent<TableMapTag>();
+
+    const std::vector<ComponentId> ids = {
+        ComponentRegistry::id<TableMapPosition>(),
+        ComponentRegistry::id<TableMapVelocity>(),
+        ComponentRegistry::id<TableMapHealth>(),
+        ComponentRegistry::id<TableMapMana>(),
+        ComponentRegistry::id<TableMapArmor>(),
+        ComponentRegistry::id<TableMapTag>(),
+    };
+
+    std::vector<EntityType> insertedTypes = makeCandidateTypes(ids);
+    TableMap map;
+
+    for (EntityType& type : insertedTypes) {
+        bool isCreated = false;
+        const auto [tid, table] = map.findOrCreate(type.clone(), registry, isCreated);
+        cr_assert(isCreated);
+        cr_assert_eq(table.id, tid);
+    }
+
+    for (TableId tid = 0; tid < map.tables.size(); ++tid) {
+        cr_assert_eq(map.tables[tid].id, tid);
+    }
+
+    for (EntityType& type : insertedTypes) {
+        type.release();
+    }
+}

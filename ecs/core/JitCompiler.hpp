@@ -1,41 +1,24 @@
 #pragma once
-#include <cstdint>
-#include <libtcc.h>
-#include <string>
 #include <vector>
-
-using FunctionHandle = uint32_t;
+#include <string>
+#include <libtcc.h>
+#include <mutex>
 
 class JitCompiler {
-    TCCState* state = nullptr;
-    std::vector<std::string> fns;
-
 public:
-    JitCompiler() {
-        this->state = tcc_new();
+    static JitCompiler& instance() {
+        static JitCompiler inst;
+        return inst;
     }
 
-    class FunctionBuilder {
-        JitCompiler& compiler;
-        FunctionHandle fn;
+    using GenericFn = void*;
 
-    public:
-        FunctionBuilder(JitCompiler& compiler, const FunctionHandle handle) : compiler(compiler), fn(handle) {}
+    GenericFn compileMigration(const std::string& sourceCode, const std::string& funcName);
 
+private:
+    JitCompiler() = default;
+    ~JitCompiler();
 
-        FunctionBuilder addInstruction(const std::string& instr) {
-            this->compiler.addInstruction(fn, instr);
-            return std::move(*this);
-        }
-    };
-
-    FunctionBuilder create_fn(std::string proto) {
-        proto.push_back('{');
-        this->fns.emplace_back(proto);
-        return {*this, static_cast<FunctionHandle>(this->fns.size() - 1)};
-    }
-
-    void addInstruction(const FunctionHandle fn, const std::string& instr) {
-        this->fns[fn].append(instr);
-    }
+    std::mutex mutex;
+    std::vector<TCCState*> compiledStates;
 };

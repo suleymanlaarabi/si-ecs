@@ -5,6 +5,7 @@
 
 Table::Table(EntityType &&type, ComponentRegistry &componentRegistry,
              const TableId tid) noexcept {
+    this->id = tid;
     this->type = type;
     type = {};
     this->columns = static_cast<Column *>(malloc(sizeof(Column) * this->type.count));
@@ -16,7 +17,7 @@ Table::Table(EntityType &&type, ComponentRegistry &componentRegistry,
         const ComponentId cid = this->type.cids[i];
         ComponentRecord &componentRecord = componentRegistry.getComponentRecord(cid);
         componentRecord.tables.push_back(tid);
-        this->setAddEdge(cid, tid);
+        this->edges.add.set(cid, TableEdge{.tid = tid});
         const size_t size = componentRecord.size;
         this->columns[i].data = nullptr;
         if (size != 0) {
@@ -26,13 +27,15 @@ Table::Table(EntityType &&type, ComponentRegistry &componentRegistry,
     }
 }
 
-Table::Table(Table &&other) noexcept : type(other.type),
+Table::Table(Table &&other) noexcept : id(other.id),
+                                       type(other.type),
                                        entities(other.entities),
                                        columns(other.columns),
                                        edges(std::move(other.edges)),
                                        count(other.count),
                                        capacity(other.capacity),
                                        bloom(other.bloom) {
+    other.id = InvalidTableId;
     other.type = {};
     other.entities = nullptr;
     other.columns = nullptr;
@@ -131,32 +134,4 @@ void *Table::getComponent(const EntityRow row, const ComponentId cid) const {
 
 [[nodiscard]] bool Table::hasComponent(const ComponentId cid) const {
     return this->type.findIndex(cid) != UINT16_MAX;
-}
-
-[[nodiscard]] bool Table::hasComponent(const ComponentId cid, const TableId tid) const {
-    return this->edges.add.atOrInvalid(cid) == tid;
-}
-
-[[nodiscard]] bool Table::hasAddEdge(const ComponentId cid) const {
-    return this->edges.add.has(cid);
-}
-
-[[nodiscard]] TableId Table::getAddEdge(const ComponentId cid) const {
-    return this->edges.add.at(cid);
-}
-
-void Table::setAddEdge(const ComponentId cid, const TableId tid) {
-    this->edges.add.set(cid, tid);
-}
-
-[[nodiscard]] bool Table::hasRemoveEdge(const ComponentId cid) const {
-    return this->edges.remove.has(cid);
-}
-
-[[nodiscard]] TableId Table::getRemoveEdge(const ComponentId cid) const {
-    return this->edges.remove.at(cid);
-}
-
-void Table::setRemoveEdge(const ComponentId cid, const TableId tid) {
-    this->edges.remove.set(cid, tid);
 }

@@ -14,15 +14,23 @@ struct Column {
     }
 };
 
+using JitMigrationFn = void (*)(Column* src_cols, Column* dst_cols, unsigned int src_row, unsigned int dst_row);
+
 class ComponentRegistry;
 
+struct TableEdge {
+    TableId tid = InvalidTableId;
+    JitMigrationFn migration = nullptr;
+};
+
 struct TableEdges {
-    SparseIndices add;
-    SparseIndices remove;
+    SparseValues<TableEdge> add;
+    SparseValues<TableEdge> remove;
 };
 
 class Table {
 public:
+    TableId id;
     EntityType type;
     Entity *entities = nullptr;
     Column *columns = nullptr;
@@ -54,20 +62,6 @@ public:
     [[nodiscard]] const EntityType &getType() const noexcept;
 
     [[nodiscard]] bool hasComponent(ComponentId cid) const;
-
-    [[nodiscard]] bool hasComponent(ComponentId cid, TableId tid) const;
-
-    [[nodiscard]] bool hasAddEdge(ComponentId cid) const;
-
-    [[nodiscard]] TableId getAddEdge(ComponentId cid) const;
-
-    void setAddEdge(ComponentId cid, TableId tid);
-
-    [[nodiscard]] bool hasRemoveEdge(ComponentId cid) const;
-
-    [[nodiscard]] TableId getRemoveEdge(ComponentId cid) const;
-
-    void setRemoveEdge(ComponentId cid, TableId tid);
 
     [[nodiscard]] uint size() const noexcept {
         return count;

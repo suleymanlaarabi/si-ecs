@@ -18,7 +18,7 @@ concept IntoSystemCondition = requires(World& world) {
 
 struct SystemDesc {
     Query query;
-    std::function<void(const EcsVec<TableId>& tables, World&)> callback;
+    void (*callback)(const EcsVec<TableId>& tables, World&);
     std::vector<SystemCondition> conditions;
 
     template <IntoSystemCondition Condition>
