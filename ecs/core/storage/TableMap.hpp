@@ -1,4 +1,7 @@
 #pragma once
+#include <cstddef>
+#include <memory>
+#include <new>
 #include <utility>
 #include <vector>
 
@@ -44,11 +47,49 @@ struct Bucket {
     uint64_t hash = UINT64_MAX;
 };
 
+struct TableSlot {
+    alignas(Table) std::byte storage[sizeof(Table)];
+};
+
+struct TableSegment {
+    std::unique_ptr<TableSlot[]> slots;
+    uint16_t used = 0;
+};
+
 struct TableMap {
-    std::vector<Table> tables;
+    static constexpr uint16_t segmentCapacity = 64;
+    std::vector<TableSegment> segments;
+    std::vector<Table*> tables;
     Bucket *buckets = nullptr;
     uint32_t size = 0;
     uint32_t count = 0;
+
+    [[nodiscard]] static Table* slotToTable(TableSlot& slot) noexcept {
+        return std::launder(reinterpret_cast<Table*>(&slot));
+    }
+
+    [[nodiscard]] static const Table* slotToTable(const TableSlot& slot) noexcept {
+        return std::launder(reinterpret_cast<const Table*>(&slot));
+    }
+
+    [[nodiscard]] Table* allocateTableSlot() {
+        if (this->segments.empty() || this->segments.back().used == segmentCapacity) {
+            this->segments.push_back({.slots = std::make_unique<TableSlot[]>(segmentCapacity), .used = 0});
+        }
+
+        TableSegment& segment = this->segments.back();
+        Table* table = slotToTable(segment.slots[segment.used]);
+        ++segment.used;
+        return table;
+    }
+
+    void destroyTables() {
+        for (TableSegment& segment : this->segments) {
+            for (uint16_t i = 0; i < segment.used; ++i) {
+                std::destroy_at(slotToTable(segment.slots[i]));
+            }
+        }
+    }
 
     inline void eraseBucketAt(const uint32_t bucketIndex) {
         const uint32_t mask = size - 1u;
@@ -106,7 +147,7 @@ struct TableMap {
 
         while (true) {
             const Bucket &b = buckets[idx];
-            if (b.tableId == InvalidTableId || (b.hash == hash && e == tables[b.tableId].getType())) {
+            if (b.tableId == InvalidTableId || (b.hash == hash && e == tables[b.tableId]->getType())) {
                 return idx;
             }
             idx = (idx + 1) & mask;
@@ -120,12 +161,14 @@ struct TableMap {
         Bucket &bucket = buckets[idx];
         ecs_assert(tables.size() <= UINT16_MAX, "table id limit reached");
         const auto tid = static_cast<TableId>(tables.size());
-        Table &table = tables.emplace_back(std::move(ownedType), componentRegistry, tid);
+        Table* table = allocateTableSlot();
+        std::construct_at(table, std::move(ownedType), componentRegistry, tid);
+        tables.push_back(table);
         bucket.tableId = tid;
         bucket.hash = hash;
         count += 1;
         isCreated = true;
-        return {tid, table};
+        return {tid, *table};
     }
 
 public:
@@ -140,6 +183,7 @@ public:
     TableMap &operator=(const TableMap &) = delete;
 
     ~TableMap() {
+        destroyTables();
         delete[] this->buckets;
     }
 
@@ -161,7 +205,7 @@ public:
         if (const Bucket &bucket = buckets[idx]; bucket.tableId != InvalidTableId) {
             e.release();
             e = {};
-            return {bucket.tableId, tables[bucket.tableId]};
+            return {bucket.tableId, *tables[bucket.tableId]};
         }
 
         return createAt(idx, hash, std::move(e), componentRegistry, isCreated);

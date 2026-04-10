@@ -12,24 +12,26 @@ extern "C" EntityRow ecs_table_add_entity(Table* table, const Entity entity) {
     return table->addEntity(entity);
 }
 
-extern "C" void ecs_finalize_migration(void* manager, Table* from, Table* to, EntityRecord* record,
-                                       const EntityRow newRow) {
-    EntityManager* entityManager = static_cast<EntityManager*>(manager);
-    if (const Entity removed = from->removeEntity(record->row); removed.index != 0) {
-        entityManager->getEntityRecord(removed).row = record->row;
-    }
+extern "C" Entity ecs_table_remove_entity(Table* table, const EntityRow row) {
+    return table->removeEntity(row);
+}
 
-    record->tid = to->id;
-    record->row = newRow;
+extern "C" TableId ecs_table_id(const Table* table) {
+    return table->id;
+}
+
+extern "C" EntityRecord* ecs_entity_record(void* manager, const Entity entity) {
+    auto* entityManager = static_cast<EntityManager*>(manager);
+    return &entityManager->getEntityRecord(entity);
 }
 
 ResolvedTableEdge EntityManager::resolveAddEdge(const TableId fromTid, const ComponentId cid) {
-    Table& from = this->tables_map.tables[fromTid];
+    Table& from = *this->tables_map.tables[fromTid];
     if (TableEdge* edge = from.edges.add.tryGet(cid);
         edge != nullptr && edge->tid != InvalidTableId) {
         return {
             .from = &from,
-            .to = &this->tables_map.tables[edge->tid],
+            .to = this->tables_map.tables[edge->tid],
             .edge = edge,
         };
     }
@@ -37,22 +39,22 @@ ResolvedTableEdge EntityManager::resolveAddEdge(const TableId fromTid, const Com
     EntityType type = from.getType().withAdd(cid);
     const TableId toTid = this->findOrCreateTable(std::move(type), *this).first;
 
-    Table& stableFrom = this->tables_map.tables[fromTid];
+    Table& stableFrom = *this->tables_map.tables[fromTid];
     stableFrom.edges.add.set(cid, TableEdge{.tid = toTid});
     return {
         .from = &stableFrom,
-        .to = &this->tables_map.tables[toTid],
+        .to = this->tables_map.tables[toTid],
         .edge = &stableFrom.edges.add.at(cid),
     };
 }
 
 ResolvedTableEdge EntityManager::resolveRemoveEdge(const TableId fromTid, const ComponentId cid) {
-    Table& from = this->tables_map.tables[fromTid];
+    Table& from = *this->tables_map.tables[fromTid];
     if (TableEdge* edge = from.edges.remove.tryGet(cid);
         edge != nullptr && edge->tid != InvalidTableId) {
         return {
             .from = &from,
-            .to = &this->tables_map.tables[edge->tid],
+            .to = this->tables_map.tables[edge->tid],
             .edge = edge,
         };
     }
@@ -60,11 +62,11 @@ ResolvedTableEdge EntityManager::resolveRemoveEdge(const TableId fromTid, const 
     EntityType type = from.type.withRemove(cid);
     const TableId toTid = this->findOrCreateTable(std::move(type), *this).first;
 
-    Table& stableFrom = this->tables_map.tables[fromTid];
+    Table& stableFrom = *this->tables_map.tables[fromTid];
     stableFrom.edges.remove.set(cid, TableEdge{.tid = toTid});
     return {
         .from = &stableFrom,
-        .to = &this->tables_map.tables[toTid],
+        .to = this->tables_map.tables[toTid],
         .edge = &stableFrom.edges.remove.at(cid),
     };
 }
@@ -77,11 +79,15 @@ static std::string generateMigrationCode(const Table& from, const Table& to, Com
     ss << "struct Column { unsigned long long size; void* data; };\n";
     ss << "typedef struct { int a, b, c; } s12;\n";
     ss << "struct Entity { unsigned int index; unsigned short generation; };\n";
-    ss << "struct EntityRecord { unsigned short tid; unsigned short generation; unsigned int row; unsigned short listenersId; };\n";
+    ss <<
+        "struct EntityRecord { unsigned short tid; unsigned short generation; unsigned int row; unsigned short listenersId; };\n";
     ss << "struct Table;\n";
     ss << "unsigned int ecs_table_add_entity(struct Table* table, struct Entity entity);\n";
-    ss << "void ecs_finalize_migration(void* manager, struct Table* from, struct Table* to, struct EntityRecord* record, unsigned int newRow);\n";
-    ss << "void " << funcName << "(struct Column* src_cols, struct Column* dst_cols, void* manager, struct Table* from, struct Table* to, struct EntityRecord* record, struct Entity entity) {\n";
+    ss << "struct Entity ecs_table_remove_entity(struct Table* table, unsigned int row);\n";
+    ss << "unsigned short ecs_table_id(struct Table* table);\n";
+    ss << "struct EntityRecord* ecs_entity_record(void* manager, struct Entity entity);\n";
+    ss << "void " << funcName <<
+        "(struct Column* src_cols, struct Column* dst_cols, void* manager, struct Table* from, struct Table* to, struct EntityRecord* record, struct Entity entity) {\n";
     ss << "  const unsigned int src_row = record->row;\n";
     if (hook != nullptr && hookBeforeFinalize) {
         ss << "  ((void(*)(struct Entity, void*))" << reinterpret_cast<uintptr_t>(hook) << ")(entity, manager);\n";
@@ -102,15 +108,20 @@ static std::string generateMigrationCode(const Table& from, const Table& to, Com
             const size_t size = registry.getComponentRecord(fromCid).size;
             if (size > 0) {
                 // Use a specialized assignment if size is a multiple of 4 or 8
-                if (size == 4) ss << "  *(int*)((char*)dst_cols[" << toIndex << "].data + dst_row * 4) = *(int*)((char*)src_cols[" << fromIndex << "].data + src_row * 4);\n";
-                else if (size == 8) ss << "  *(long long*)((char*)dst_cols[" << toIndex << "].data + dst_row * 8) = *(long long*)((char*)src_cols[" << fromIndex << "].data + src_row * 8);\n";
+                if (size == 4)
+                    ss << "  *(int*)((char*)dst_cols[" << toIndex <<
+                        "].data + dst_row * 4) = *(int*)((char*)src_cols[" << fromIndex << "].data + src_row * 4);\n";
+                else if (size == 8)
+                    ss << "  *(long long*)((char*)dst_cols[" << toIndex <<
+                        "].data + dst_row * 8) = *(long long*)((char*)src_cols[" << fromIndex <<
+                        "].data + src_row * 8);\n";
                 else if (size == 12) {
-                    ss << "  *(s12*)((char*)dst_cols[" << toIndex << "].data + dst_row * 12) = *(s12*)((char*)src_cols[" << fromIndex << "].data + src_row * 12);\n";
-                }
-                else {
-                    ss << "  __builtin_memcpy((char*)dst_cols[" << toIndex << "].data + dst_row * " << size 
-                       << ", (char*)src_cols[" << fromIndex << "].data + src_row * " << size 
-                       << ", " << size << ");\n";
+                    ss << "  *(s12*)((char*)dst_cols[" << toIndex << "].data + dst_row * 12) = *(s12*)((char*)src_cols["
+                        << fromIndex << "].data + src_row * 12);\n";
+                } else {
+                    ss << "  __builtin_memcpy((char*)dst_cols[" << toIndex << "].data + dst_row * " << size
+                        << ", (char*)src_cols[" << fromIndex << "].data + src_row * " << size
+                        << ", " << size << ");\n";
                 }
             }
             ++fromIndex;
@@ -122,7 +133,12 @@ static std::string generateMigrationCode(const Table& from, const Table& to, Com
         }
     }
 
-    ss << "  ecs_finalize_migration(manager, from, to, record, dst_row);\n";
+    ss << "  const struct Entity swapped = ecs_table_remove_entity(from, src_row);\n";
+    ss << "  if (swapped.index != 0) {\n";
+    ss << "    ecs_entity_record(manager, swapped)->row = src_row;\n";
+    ss << "  }\n";
+    ss << "  record->tid = ecs_table_id(to);\n";
+    ss << "  record->row = dst_row;\n";
     if (hook != nullptr && !hookBeforeFinalize) {
         ss << "  ((void(*)(struct Entity, void*))" << reinterpret_cast<uintptr_t>(hook) << ")(entity, manager);\n";
     }
@@ -170,7 +186,7 @@ void EntityManager::destroyEntity(const Entity entity) {
 
     EntityRecord& record = this->getEntityRecord(entity);
     const TableId currentTid = record.tid;
-    Table& currentTable = this->tables_map.tables[currentTid];
+    Table& currentTable = *this->tables_map.tables[currentTid];
     const auto& [cids, count] = currentTable.getType();
 
     for (uint16_t i = 0; i < count; ++i) {
@@ -196,7 +212,7 @@ void* EntityManager::getComponent(const Entity entity, const ComponentId cid) {
     ecs_assert(this->isComponentRegistered(cid), "component is not registered");
 
     const EntityRecord& record = this->getEntityRecord(entity);
-    const Table& table = this->getTables()[record.tid];
+    const Table& table = *this->getTables()[record.tid];
 
     return table.getComponent(record.row, cid);
 }
@@ -213,7 +229,7 @@ void EntityManager::setComponent(const Entity entity, const ComponentId cid, con
     this->addComponent(entity, cid);
 
     const EntityRecord& record = this->getEntityRecord(entity);
-    const Table& table = this->getTables()[record.tid];
+    const Table& table = *this->getTables()[record.tid];
 
     void* value = table.getComponent(record.row, cid);
 
@@ -251,13 +267,13 @@ bool EntityManager::hasComponent(const Entity entity, const ComponentId cid) {
     ecs_assert_entity_alive(entity);
     ecs_assert(this->isComponentRegistered(cid), "component is not registered");
     const EntityRecord& record = this->getEntityRecord(entity);
-    return this->tables_map.tables[record.tid].hasComponent(cid);
+    return this->tables_map.tables[record.tid]->hasComponent(cid);
 }
 
 std::pair<Table&, EntityRow> EntityManager::getTable(const Entity entity) {
     EntityRecord& record = this->getEntityRecord(entity);
     return {
-        this->getTables()[record.tid],
+        *this->getTables()[record.tid],
         record.row
     };
 }

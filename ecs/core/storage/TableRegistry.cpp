@@ -23,6 +23,6 @@ std::pair<TableId, Table&> TableRegistry::findOrCreateTable(EntityType&& type,
     return {tid, table};
 }
 
-std::vector<Table>& TableRegistry::getTables() noexcept {
+std::vector<Table*>& TableRegistry::getTables() noexcept {
     return this->tables_map.tables;
 }

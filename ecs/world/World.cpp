@@ -3,7 +3,7 @@
 #include "Commands.hpp"
 #include "SystemDesc.hpp"
 
-std::vector<Table> &worldTables(World &world) { return world.getTables(); }
+std::vector<Table*> &worldTables(World &world) { return world.getTables(); }
 
 std::pair<Table &, EntityRow> worldGetTable(World &world, const Entity entity) {
     return world.getTable(entity);
@@ -16,14 +16,14 @@ World::World() {
 }
 
 World::~World() {
-    for (Table &table: this->entityManager_.getTables()) {
-        if (!table.hasComponent(ComponentRegistry::id<RelationSource<ChildOf> >())) {
+    for (Table *table: this->entityManager_.getTables()) {
+        if (!table->hasComponent(ComponentRegistry::id<RelationSource<ChildOf> >())) {
             continue;
         }
 
         auto *sources = static_cast<RelationSource<ChildOf> *>(
-            table.getColumn(ComponentRegistry::id<RelationSource<ChildOf> >()));
-        for (EntityRow row = 0; row < table.size(); ++row) {
+            table->getColumn(ComponentRegistry::id<RelationSource<ChildOf> >()));
+        for (EntityRow row = 0; row < table->size(); ++row) {
             sources[row].entities.free();
         }
     }

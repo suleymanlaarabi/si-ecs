@@ -303,7 +303,7 @@ Test(table_map, growth_preserves_table_ids_after_vector_reallocation) {
     }
 
     for (TableId tid = 0; tid < map.tables.size(); ++tid) {
-        cr_assert_eq(map.tables[tid].id, tid);
+        cr_assert_eq(map.tables[tid]->id, tid);
     }
 
     for (EntityType& type : insertedTypes) {

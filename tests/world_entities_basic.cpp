@@ -9,9 +9,9 @@ namespace {
     };
 
     uint64_t componentTableSize(World& world, const ComponentId cid) {
-        for (Table& table : world.getTables()) {
-            if (table.hasComponent(cid)) {
-                return table.size();
+        for (Table* table : world.getTables()) {
+            if (table->hasComponent(cid)) {
+                return table->size();
             }
         }
 

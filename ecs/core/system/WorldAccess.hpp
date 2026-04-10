@@ -8,5 +8,5 @@
 class Table;
 class World;
 
-std::vector<Table>& worldTables(World& world);
+std::vector<Table*>& worldTables(World& world);
 std::pair<Table&, EntityRow> worldGetTable(World& world, Entity entity);

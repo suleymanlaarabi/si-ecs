@@ -333,16 +333,16 @@ SystemDesc each() {
         .query = buildSystemQuery<Args>(query<Terms...>(), tuple_index_sequence<Args>()),
         .callback =
         +[](const EcsVec<TableId>& tids, World& world) {
-            Table* tables = worldTables(world).data();
+            auto& tables = worldTables(world);
             FromWorldsArgs fromWorldArgs =
                 fetchFromWorlds<FromWorldsArgs>(world, tuple_index_sequence<FromWorldsArgs>());
 
             for (const TableId tid : tids) {
                 if constexpr (supportsFastEach<OriginalArgs, Args>(tuple_index_sequence<Args>())) {
                     runFastTable<func, OriginalArgs, Args>(
-                        world, fromWorldArgs, tables[tid], tuple_index_sequence<Args>());
+                        world, fromWorldArgs, *tables[tid], tuple_index_sequence<Args>());
                 } else {
-                    runTable<func, Args>(world, fromWorldArgs, tables[tid], tuple_index_sequence<Args>());
+                    runTable<func, Args>(world, fromWorldArgs, *tables[tid], tuple_index_sequence<Args>());
                 }
             }
         }

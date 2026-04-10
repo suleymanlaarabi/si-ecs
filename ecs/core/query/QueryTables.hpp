@@ -28,16 +28,16 @@ inline void forEachMatchingTable(const Query& query, const ComponentRegistry& co
 
     if (const auto* seed = querySeedTables(query, componentRegistry); seed != nullptr) {
         for (const TableId tid : *seed) {
-            if (Table& table = tables[tid]; query.matchTable(table)) {
-                func(tid, table);
+            if (Table* table = tables[tid]; query.matchTable(*table)) {
+                func(tid, *table);
             }
         }
         return;
     }
 
     for (TableId tid = 0; tid < tables.size(); ++tid) {
-        if (Table& table = tables[tid]; query.matchTable(table)) {
-            func(tid, table);
+        if (Table* table = tables[tid]; query.matchTable(*table)) {
+            func(tid, *table);
         }
     }
 }

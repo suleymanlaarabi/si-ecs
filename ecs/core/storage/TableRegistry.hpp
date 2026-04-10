@@ -18,7 +18,7 @@ public:
     TableRegistry();
 
     std::pair<TableId, Table&> findOrCreateTable(EntityType&& type, ComponentRegistry& componentRegistry) noexcept;
-    std::vector<Table>& getTables() noexcept;
+    std::vector<Table*>& getTables() noexcept;
 
     TableMap& getTableMap() noexcept {
         return this->tables_map;

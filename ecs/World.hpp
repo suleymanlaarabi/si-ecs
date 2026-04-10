@@ -78,7 +78,7 @@ public:
         return this->entityManager_.getTable(entity);
     }
 
-    std::vector<Table>& getTables() {
+    std::vector<Table*>& getTables() {
         return this->entityManager_.getTables();
     }
 
