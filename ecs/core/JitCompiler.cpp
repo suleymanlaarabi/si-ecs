@@ -1,6 +1,14 @@
 #include "JitCompiler.hpp"
+#include "EcsType.hpp"
+#include "Table.hpp"
 #include <memory>
 #include <stdexcept>
+
+class EntityManager;
+struct EntityRecord;
+
+extern "C" EntityRow ecs_table_add_entity(Table* table, Entity entity);
+extern "C" void ecs_finalize_migration(void* manager, Table* from, Table* to, EntityRecord* record, EntityRow newRow);
 
 JitCompiler::~JitCompiler() {
     for (TCCState* state : this->compiledStates) {
@@ -18,6 +26,9 @@ JitCompiler::GenericFn JitCompiler::compileMigration(const std::string& sourceCo
     std::unique_ptr<TCCState, decltype(&tcc_delete)> state(rawState, &tcc_delete);
 
     tcc_set_output_type(state.get(), TCC_OUTPUT_MEMORY);
+
+    tcc_add_symbol(state.get(), "ecs_table_add_entity", reinterpret_cast<void*>(&ecs_table_add_entity));
+    tcc_add_symbol(state.get(), "ecs_finalize_migration", reinterpret_cast<void*>(&ecs_finalize_migration));
 
     if (tcc_compile_string(state.get(), sourceCode.c_str()) == -1) {
         throw std::runtime_error("TCC compilation failed for: " + sourceCode);

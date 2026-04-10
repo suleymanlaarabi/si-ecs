@@ -13,13 +13,14 @@ struct ResolvedTableEdge {
 };
 
 class EntityManager : public EntityRegistry, public ComponentRegistry, public TableRegistry {
-    void finalizeRowMigration(Table &from, EntityRecord &record, EntityRow newRow);
     [[nodiscard]] ResolvedTableEdge resolveAddEdge(TableId fromTid, ComponentId cid);
     [[nodiscard]] ResolvedTableEdge resolveRemoveEdge(TableId fromTid, ComponentId cid);
 
-    [[nodiscard]] JitMigrationFn compileMigration(const Table& from, const Table& to);
-
-    void migrateEntityRow(Table &from, Table &to, EntityRecord &record, Entity entity, JitMigrationFn migration);
+    [[nodiscard]] JitMigrationFn compileMigration(
+        const Table& from,
+        const Table& to,
+        void (*hook)(Entity, void*),
+        bool hookBeforeFinalize);
 
 public:
     std::pair<Table &, EntityRow> getTable(Entity entity);

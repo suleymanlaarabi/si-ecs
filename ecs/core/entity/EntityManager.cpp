@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <sstream>
 #include "EntityManager.hpp"
 #include <cstring>
@@ -7,13 +8,19 @@
 #include "Table.hpp"
 #include "JitCompiler.hpp"
 
-void EntityManager::finalizeRowMigration(Table& from, EntityRecord& record,
-                                         const EntityRow newRow) {
-    if (const Entity removed = from.removeEntity(record.row); removed.index != 0) {
-        this->getEntityRecord(removed).row = record.row;
+extern "C" EntityRow ecs_table_add_entity(Table* table, const Entity entity) {
+    return table->addEntity(entity);
+}
+
+extern "C" void ecs_finalize_migration(void* manager, Table* from, Table* to, EntityRecord* record,
+                                       const EntityRow newRow) {
+    EntityManager* entityManager = static_cast<EntityManager*>(manager);
+    if (const Entity removed = from->removeEntity(record->row); removed.index != 0) {
+        entityManager->getEntityRecord(removed).row = record->row;
     }
 
-    record.row = newRow;
+    record->tid = to->id;
+    record->row = newRow;
 }
 
 ResolvedTableEdge EntityManager::resolveAddEdge(const TableId fromTid, const ComponentId cid) {
@@ -62,11 +69,24 @@ ResolvedTableEdge EntityManager::resolveRemoveEdge(const TableId fromTid, const 
     };
 }
 
-static std::string generateMigrationCode(const Table& from, const Table& to, ComponentRegistry& registry, const std::string& funcName) {
+static std::string generateMigrationCode(const Table& from, const Table& to, ComponentRegistry& registry,
+                                         const std::string& funcName,
+                                         void (*hook)(Entity, void*),
+                                         const bool hookBeforeFinalize) {
     std::stringstream ss;
     ss << "struct Column { unsigned long long size; void* data; };\n";
     ss << "typedef struct { int a, b, c; } s12;\n";
-    ss << "void " << funcName << "(struct Column* src_cols, struct Column* dst_cols, unsigned int src_row, unsigned int dst_row) {\n";
+    ss << "struct Entity { unsigned int index; unsigned short generation; };\n";
+    ss << "struct EntityRecord { unsigned short tid; unsigned short generation; unsigned int row; unsigned short listenersId; };\n";
+    ss << "struct Table;\n";
+    ss << "unsigned int ecs_table_add_entity(struct Table* table, struct Entity entity);\n";
+    ss << "void ecs_finalize_migration(void* manager, struct Table* from, struct Table* to, struct EntityRecord* record, unsigned int newRow);\n";
+    ss << "void " << funcName << "(struct Column* src_cols, struct Column* dst_cols, void* manager, struct Table* from, struct Table* to, struct EntityRecord* record, struct Entity entity) {\n";
+    ss << "  const unsigned int src_row = record->row;\n";
+    if (hook != nullptr && hookBeforeFinalize) {
+        ss << "  ((void(*)(struct Entity, void*))" << reinterpret_cast<uintptr_t>(hook) << ")(entity, manager);\n";
+    }
+    ss << "  const unsigned int dst_row = ecs_table_add_entity(to, entity);\n";
 
     const EntityType& fromType = from.getType();
     const EntityType& toType = to.getType();
@@ -102,22 +122,20 @@ static std::string generateMigrationCode(const Table& from, const Table& to, Com
         }
     }
 
+    ss << "  ecs_finalize_migration(manager, from, to, record, dst_row);\n";
+    if (hook != nullptr && !hookBeforeFinalize) {
+        ss << "  ((void(*)(struct Entity, void*))" << reinterpret_cast<uintptr_t>(hook) << ")(entity, manager);\n";
+    }
     ss << "}\n";
     return ss.str();
 }
 
-JitMigrationFn EntityManager::compileMigration(const Table& from, const Table& to) {
+JitMigrationFn EntityManager::compileMigration(const Table& from, const Table& to,
+                                               void (*hook)(Entity, void*),
+                                               const bool hookBeforeFinalize) {
     const std::string funcName = "migrate_" + std::to_string(from.id) + "_to_" + std::to_string(to.id);
-    const std::string code = generateMigrationCode(from, to, *this, funcName);
+    const std::string code = generateMigrationCode(from, to, *this, funcName, hook, hookBeforeFinalize);
     return reinterpret_cast<JitMigrationFn>(JitCompiler::instance().compileMigration(code, funcName));
-}
-
-void EntityManager::migrateEntityRow(Table& from, Table& to, EntityRecord& record, const Entity entity,
-                                     const JitMigrationFn migration) {
-    const EntityRow newRow = to.addEntity(entity);
-    migration(from.columns, to.columns, record.row, newRow);
-
-    this->finalizeRowMigration(from, record, newRow);
 }
 
 
@@ -132,17 +150,19 @@ void EntityManager::addComponent(const Entity entity, const ComponentId cid) {
     }
 
     if (resolved.edge->migration == nullptr) {
-        resolved.edge->migration = this->compileMigration(*resolved.from, *resolved.to);
+        const ComponentRecord& componentRecord = this->getComponentRecord(cid);
+        resolved.edge->migration = this->compileMigration(
+            *resolved.from, *resolved.to, componentRecord.onAdd, false);
     }
 
-    this->migrateEntityRow(*resolved.from, *resolved.to, record, entity, resolved.edge->migration);
-    record.tid = resolved.edge->tid;
-
-    const ComponentRecord& componentRecord = this->getComponentRecord(cid);
-
-    if (componentRecord.onAdd) {
-        componentRecord.onAdd(entity, this);
-    }
+    resolved.edge->migration(
+        resolved.from->columns,
+        resolved.to->columns,
+        this,
+        resolved.from,
+        resolved.to,
+        &record,
+        entity);
 }
 
 void EntityManager::destroyEntity(const Entity entity) {
@@ -206,23 +226,25 @@ void EntityManager::removeComponent(const Entity entity, const ComponentId cid) 
     ecs_assert(this->isComponentRegistered(cid), "component is not registered");
 
     EntityRecord& record = this->getEntityRecord(entity);
-    Table& from = this->getTables()[record.tid];
-
-    if (!from.hasComponent(cid)) {
+    const ResolvedTableEdge resolved = this->resolveRemoveEdge(record.tid, cid);
+    if (resolved.edge->tid == record.tid) {
         return;
     }
 
-    if (const ComponentRecord& componentRecord = this->getComponentRecord(cid); componentRecord.onRemove) {
-        componentRecord.onRemove(entity, this);
-    }
-
-    const ResolvedTableEdge resolved = this->resolveRemoveEdge(record.tid, cid);
     if (resolved.edge->migration == nullptr) {
-        resolved.edge->migration = this->compileMigration(*resolved.from, *resolved.to);
+        const ComponentRecord& componentRecord = this->getComponentRecord(cid);
+        resolved.edge->migration = this->compileMigration(
+            *resolved.from, *resolved.to, componentRecord.onRemove, true);
     }
 
-    this->migrateEntityRow(*resolved.from, *resolved.to, record, entity, resolved.edge->migration);
-    record.tid = resolved.edge->tid;
+    resolved.edge->migration(
+        resolved.from->columns,
+        resolved.to->columns,
+        this,
+        resolved.from,
+        resolved.to,
+        &record,
+        entity);
 }
 
 bool EntityManager::hasComponent(const Entity entity, const ComponentId cid) {

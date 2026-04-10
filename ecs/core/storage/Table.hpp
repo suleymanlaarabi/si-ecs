@@ -14,7 +14,12 @@ struct Column {
     }
 };
 
-using JitMigrationFn = void (*)(Column* src_cols, Column* dst_cols, unsigned int src_row, unsigned int dst_row);
+struct EntityRecord;
+class Table;
+
+using JitMigrationFn = void (*)(Column* src_cols, Column* dst_cols, void* manager,
+                                Table* from, Table* to, EntityRecord* record,
+                                Entity entity);
 
 class ComponentRegistry;
 

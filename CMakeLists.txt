@@ -79,6 +79,11 @@ target_link_libraries(ecs_bench_migration_32 PRIVATE ecs)
 target_precompile_headers(ecs_bench_migration_32 PRIVATE ecs/pch.hpp)
 ecs_enable_sanitizers(ecs_bench_migration_32)
 
+add_executable(ecs_bench_migration_32_hooks benchmarks/migration_bench_32_hooks.cpp benchmarks/BenchCommon.hpp)
+target_link_libraries(ecs_bench_migration_32_hooks PRIVATE ecs)
+target_precompile_headers(ecs_bench_migration_32_hooks PRIVATE ecs/pch.hpp)
+ecs_enable_sanitizers(ecs_bench_migration_32_hooks)
+
 include(CTest)
 if (BUILD_TESTING)
   find_package(PkgConfig REQUIRED)
